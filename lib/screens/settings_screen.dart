@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:ota_update/ota_update.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../models/friend.dart';
 import '../services/storage_service.dart';
+import '../services/update_service.dart';
 
 class SettingsPage extends StatelessWidget {
   final FriendStorage storage;
@@ -16,6 +19,148 @@ class SettingsPage extends StatelessWidget {
     required this.isDark,
     required this.onThemeChanged,
   });
+
+  void _checkForUpdates(BuildContext context) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF111111) : Colors.white,
+        content: Row(
+          children: [
+            const CircularProgressIndicator(color: Color(0xFFD71921)),
+            const SizedBox(width: 20),
+            Text(
+              "Checking for updates...",
+              style: TextStyle(color: isDark ? Colors.white : Colors.black),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final updateInfo = await UpdateService().checkForUpdate();
+      if (!context.mounted) return;
+      Navigator.pop(context); // Close loading dialog
+
+      if (!updateInfo.hasUpdate) {
+        showDialog(
+          context: context,
+          builder: (dialogCtx) => AlertDialog(
+            backgroundColor: isDark ? const Color(0xFF111111) : Colors.white,
+            title: Row(
+              children: [
+                const Icon(Icons.check_circle_outline, color: Colors.green),
+                const SizedBox(width: 10),
+                Text(
+                  "UP TO DATE",
+                  style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 16),
+                ),
+              ],
+            ),
+            content: Text(
+              "You are on the latest version (v${updateInfo.currentVersion}).",
+              style: TextStyle(color: isDark ? Colors.grey : Colors.black87),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: const Text("OK", style: TextStyle(color: Color(0xFFD71921))),
+              ),
+            ],
+          ),
+        );
+      } else {
+        showDialog(
+          context: context,
+          builder: (dialogCtx) => AlertDialog(
+            backgroundColor: isDark ? const Color(0xFF111111) : Colors.white,
+            title: Row(
+              children: [
+                const Icon(Icons.system_update_alt, color: Color(0xFFD71921)),
+                const SizedBox(width: 10),
+                Text(
+                  "UPDATE AVAILABLE",
+                  style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 16),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Version ${updateInfo.latestVersion} is available (Current: ${updateInfo.currentVersion}).",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : Colors.black,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  "Release Notes:",
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  updateInfo.releaseNotes,
+                  style: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: const Text("LATER", style: TextStyle(color: Colors.grey)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD71921)),
+                onPressed: () {
+                  Navigator.pop(dialogCtx);
+                  _startOtaUpdate(context, updateInfo);
+                },
+                child: const Text("UPDATE NOW", style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Failed to check for updates: $e"),
+          backgroundColor: const Color(0xFFD71921),
+        ),
+      );
+    }
+  }
+
+  void _startOtaUpdate(BuildContext context, UpdateInfo updateInfo) {
+    if (updateInfo.downloadUrl.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("No download URL found for this update."),
+          backgroundColor: Color(0xFFD71921),
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return _OtaDownloadDialog(
+          downloadUrl: updateInfo.downloadUrl,
+          version: updateInfo.latestVersion,
+          isDark: isDark,
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -157,6 +302,12 @@ class SettingsPage extends StatelessWidget {
                 subtitle: Text('$version ($build)', style: TextStyle(color: isDark ? Colors.grey : Colors.black87)),
               );
             },
+          ),
+          ListTile(
+            leading: Icon(Icons.system_update_alt, color: isDark ? Colors.white : Colors.black),
+            title: const Text("Check for Updates"),
+            subtitle: Text("Fetch latest release from GitHub", style: TextStyle(color: isDark ? Colors.grey : Colors.black54)),
+            onTap: () => _checkForUpdates(context),
           ),
         ],
       ),
@@ -532,3 +683,148 @@ class _ImportDataPageState extends State<ImportDataPage> {
     );
   }
 }
+
+class _OtaDownloadDialog extends StatefulWidget {
+  final String downloadUrl;
+  final String version;
+  final bool isDark;
+
+  const _OtaDownloadDialog({
+    required this.downloadUrl,
+    required this.version,
+    required this.isDark,
+  });
+
+  @override
+  State<_OtaDownloadDialog> createState() => _OtaDownloadDialogState();
+}
+
+class _OtaDownloadDialogState extends State<_OtaDownloadDialog> {
+  StreamSubscription<OtaEvent>? _subscription;
+  String _statusText = "Starting download...";
+  double _progress = 0.0;
+  bool _hasError = false;
+  String _errorMessage = "";
+
+  @override
+  void initState() {
+    super.initState();
+    _startDownload();
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
+  }
+
+  void _startDownload() {
+    try {
+      _subscription = UpdateService()
+          .startDownloadAndInstall(widget.downloadUrl)
+          .listen(
+        (event) {
+          if (!mounted) return;
+          setState(() {
+            switch (event.status) {
+              case OtaStatus.DOWNLOADING:
+                final parsed = double.tryParse(event.value ?? '0') ?? 0;
+                _progress = parsed / 100.0;
+                _statusText = "Downloading update: ${parsed.toInt()}%";
+                break;
+              case OtaStatus.INSTALLING:
+                _progress = 1.0;
+                _statusText = "Launching package installer...";
+                break;
+              case OtaStatus.INSTALLATION_DONE:
+                _statusText = "Installation complete!";
+                break;
+              case OtaStatus.ALREADY_RUNNING_ERROR:
+                _hasError = true;
+                _errorMessage = "Update is already running in the background.";
+                break;
+              case OtaStatus.PERMISSION_NOT_GRANTED_ERROR:
+                _hasError = true;
+                _errorMessage = "Permission to install unknown apps was denied.";
+                break;
+              case OtaStatus.DOWNLOAD_ERROR:
+                _hasError = true;
+                _errorMessage = "Failed to download update file. Check connection.";
+                break;
+              case OtaStatus.CHECKSUM_ERROR:
+                _hasError = true;
+                _errorMessage = "Downloaded file checksum verification failed.";
+                break;
+              case OtaStatus.INTERNAL_ERROR:
+                _hasError = true;
+                _errorMessage = event.value ?? "An internal error occurred.";
+                break;
+              default:
+                break;
+            }
+          });
+        },
+        onError: (err) {
+          if (!mounted) return;
+          setState(() {
+            _hasError = true;
+            _errorMessage = err.toString();
+          });
+        },
+      );
+    } catch (e) {
+      setState(() {
+        _hasError = true;
+        _errorMessage = e.toString();
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: widget.isDark ? const Color(0xFF111111) : Colors.white,
+      title: Text(
+        _hasError ? "UPDATE ERROR" : "DOWNLOADING UPDATE",
+        style: TextStyle(
+          color: _hasError ? const Color(0xFFD71921) : (widget.isDark ? Colors.white : Colors.black),
+          fontWeight: FontWeight.bold,
+          fontSize: 16,
+        ),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!_hasError) ...[
+            LinearProgressIndicator(
+              value: _progress > 0 ? _progress : null,
+              color: const Color(0xFFD71921),
+              backgroundColor: widget.isDark ? Colors.white12 : Colors.black12,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _statusText,
+              style: TextStyle(color: widget.isDark ? Colors.white70 : Colors.black87),
+            ),
+          ] else ...[
+            const Icon(Icons.error_outline, color: Color(0xFFD71921), size: 40),
+            const SizedBox(height: 12),
+            Text(
+              _errorMessage,
+              style: TextStyle(color: widget.isDark ? Colors.white70 : Colors.black87),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        if (_hasError)
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("CLOSE", style: TextStyle(color: Color(0xFFD71921))),
+          ),
+      ],
+    );
+  }
+}
+
