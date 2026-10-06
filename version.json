@@ -1,6 +1,6 @@
 {
-    "version":  "1.2.0",
-    "buildNumber":  1002,
-    "downloadUrl":  "https://raw.githubusercontent.com/K0UM0RI/ledger_app_release/main/ledger-v1.2.0.apk",
-    "releaseNotes":  "Ledger v1.2.0 - Fast \u0026 offline debt tracker with Nothing theme, JSON backup/restore, and in-app updates."
+    "version":  "1.3.0",
+    "buildNumber":  1003,
+    "downloadUrl":  "https://raw.githubusercontent.com/K0UM0RI/ledger_app_release/main/ledger-v1.3.0.apk",
+    "releaseNotes":  "Added Borrowed Objects tracker per friend with return status"
 }

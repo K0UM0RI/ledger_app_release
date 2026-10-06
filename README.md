@@ -10,13 +10,13 @@ Ledger helps you easily track who owes you and who you owe with friends and fami
 
 Directly download the stable release APK:
 
-### [Download ledger-v1.2.0.apk](./ledger-v1.2.0.apk)
+### [Download ledger-v1.3.0.apk](./ledger-v1.3.0.apk)
 
 ---
 
 ## Installation Guide (Android)
 
-1. Download **[ledger-v1.2.0.apk](./ledger-v1.2.0.apk)** above.
+1. Download **[ledger-v1.3.0.apk](./ledger-v1.3.0.apk)** above.
 2. Open the downloaded file on your Android phone.
 3. If prompted:
    - Tap **Settings** when Android warns about installing from unknown sources.
