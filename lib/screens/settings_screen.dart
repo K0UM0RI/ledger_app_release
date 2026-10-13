@@ -818,11 +818,24 @@ class _OtaDownloadDialogState extends State<_OtaDownloadDialog> {
         ],
       ),
       actions: [
-        if (_hasError)
+        if (_hasError) ...[
+          TextButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: widget.downloadUrl));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("Direct APK download link copied to clipboard!"),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            },
+            child: const Text("COPY LINK", style: TextStyle(color: Colors.blue)),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text("CLOSE", style: TextStyle(color: Color(0xFFD71921))),
           ),
+        ],
       ],
     );
   }

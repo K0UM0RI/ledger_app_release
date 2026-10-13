@@ -166,8 +166,13 @@ class UpdateService {
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 10);
     try {
-      final request = await client.getUrl(Uri.parse(url));
+      final cacheBuster = url.contains('?') ? '&' : '?';
+      final fetchUri =
+          Uri.parse('$url${cacheBuster}_t=${DateTime.now().millisecondsSinceEpoch}');
+      final request = await client.getUrl(fetchUri);
       request.headers.set('User-Agent', 'LedgerApp');
+      request.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      request.headers.set('Pragma', 'no-cache');
       final response =
           await request.close().timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
