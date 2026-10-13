@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'dart:typed_data';
+import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
 import '../models/friend.dart';
 
 class PdfService {
@@ -303,9 +305,16 @@ class PdfService {
     final bytes = await generateStatementPdf(friend);
     final sanitizedName =
         friend.name.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
-    await Printing.sharePdf(
-      bytes: bytes,
-      filename: 'ledger_${sanitizedName}_statement.pdf',
+    final tempDir = await getTemporaryDirectory();
+    final file = File('${tempDir.path}/ledger_${sanitizedName}_statement.pdf');
+    await file.writeAsBytes(bytes, flush: true);
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path, mimeType: 'application/pdf')],
+        subject: 'Ledger Statement - ${friend.name}',
+        text: 'Statement for ${friend.name} from Ledger',
+        title: 'Share Statement',
+      ),
     );
   }
 }

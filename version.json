@@ -1,6 +1,6 @@
 {
-    "version":  "1.4.1",
-    "buildNumber":  1005,
-    "downloadUrl":  "https://raw.githubusercontent.com/K0UM0RI/ledger_app_release/main/ledger-v1.4.1.apk",
-    "releaseNotes":  "Ledger v1.4.1 - Minimal PDF statements, unlimited transaction corrections, streamlined UI"
+    "version":  "1.4.2",
+    "buildNumber":  1006,
+    "downloadUrl":  "https://raw.githubusercontent.com/K0UM0RI/ledger_app_release/main/ledger-v1.4.2.apk",
+    "releaseNotes":  "Ledger v1.4.2 - Direct native PDF statement sharing without printing dependencies, documentation updates"
 }

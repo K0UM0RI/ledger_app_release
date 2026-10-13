@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/borrowed_item.dart';
 import '../models/friend.dart';
 import '../models/transaction.dart';
-import '../widgets/statement_dialog.dart';
+import '../services/pdf_service.dart';
 
 class FriendDetailsPage extends StatefulWidget {
   final Friend friend;
@@ -366,14 +366,18 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
     );
   }
 
-  void _openStatementDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => StatementDialog(
-        friend: widget.friend,
-        isDark: widget.isDark,
-      ),
-    );
+  Future<void> _sharePdfStatement() async {
+    try {
+      await PdfService.shareStatementPdf(widget.friend);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Failed to share PDF: $e"),
+          backgroundColor: const Color(0xFFD71921),
+        ),
+      );
+    }
   }
 
   void _editTransactionDialog(Transaction tx) {
@@ -576,7 +580,7 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
           IconButton(
             icon: const Icon(Icons.picture_as_pdf_outlined),
             tooltip: "Share PDF",
-            onPressed: _openStatementDialog,
+            onPressed: _sharePdfStatement,
           ),
           if (widget.friend.amountOwed.abs() > 0.01)
             IconButton(
