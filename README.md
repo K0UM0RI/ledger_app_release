@@ -10,13 +10,13 @@ Ledger helps you easily track who owes you and who you owe with friends and fami
 
 Directly download the stable release APK:
 
-### [Download ledger-v1.4.0.apk](./ledger-v1.4.0.apk)
+### [Download ledger-v1.4.1.apk](./ledger-v1.4.1.apk)
 
 ---
 
 ## Installation Guide (Android)
 
-1. Download **[ledger-v1.4.0.apk](./ledger-v1.4.0.apk)** above.
+1. Download **[ledger-v1.4.1.apk](./ledger-v1.4.1.apk)** above.
 2. Open the downloaded file on your Android phone.
 3. If prompted:
    - Tap **Settings** when Android warns about installing from unknown sources.
@@ -34,6 +34,7 @@ Directly download the stable release APK:
 - **Dark & Light Mode**: Automatically adapts or toggle your preference in Settings.
 - **Full Data Portability**: Export and import your data anytime as transparent JSON backups with one-tap copy & paste.
 - **Detailed History**: View sorted transaction histories and settle up balances with a single tap.
+- **In-App Updates**: Check for new releases directly from Settings and update with one tap.
 
 ---
 
@@ -53,7 +54,7 @@ Directly download the stable release APK:
 
 ## Privacy Policy
 
-Ledger does **not** collect, store, transmit, or share any personal information. All your data resides solely in local device storage. No internet permission is requested by this app.
+Ledger does **not** collect, store, transmit, or share any personal information. All your data resides solely in local device storage. No internet permission is used for telemetry or tracking.
 
 ---
 
