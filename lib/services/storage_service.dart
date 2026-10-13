@@ -138,6 +138,15 @@ class FriendStorage {
               existing.addTransaction(tx);
             }
           }
+          for (var bItem in imported.borrowedItems) {
+            bool exists = existing.borrowedItems.any((eItem) =>
+                eItem.id == bItem.id ||
+                (eItem.name.toLowerCase() == bItem.name.toLowerCase() &&
+                    eItem.date.isAtSameMomentAs(bItem.date)));
+            if (!exists) {
+              existing.addBorrowedItem(bItem);
+            }
+          }
         } else {
           friendMap[key] = imported;
         }

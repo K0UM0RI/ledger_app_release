@@ -34,7 +34,6 @@ Directly download the stable release APK:
 - **Dark & Light Mode**: Automatically adapts or toggle your preference in Settings.
 - **Full Data Portability**: Export and import your data anytime as transparent JSON backups with one-tap copy & paste.
 - **Detailed History**: View sorted transaction histories and settle up balances with a single tap.
-- **In-App Updates**: Check for new releases directly from Settings and update with one tap.
 
 ---
 
@@ -54,7 +53,7 @@ Directly download the stable release APK:
 
 ## Privacy Policy
 
-Ledger does **not** collect, store, transmit, or share any personal information. All your data resides solely in local device storage. No internet permission is used for telemetry or tracking.
+Ledger does **not** collect, store, transmit, or share any personal information. All your data resides solely in local device storage. No internet permission is requested by this app.
 
 ---
 

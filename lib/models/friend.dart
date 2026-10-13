@@ -76,6 +76,21 @@ class Friend {
     amountOwed += transaction.amount;
   }
 
+  void correctTransaction(
+    Transaction transaction,
+    double newAmount,
+    String newReason, {
+    String? note,
+  }) {
+    final diff = newAmount - transaction.amount;
+    transaction.correct(
+      newAmount: newAmount,
+      newReason: newReason,
+      note: note,
+    );
+    amountOwed += diff;
+  }
+
   void addBorrowedItem(BorrowedItem item) {
     borrowedItems.add(item);
   }

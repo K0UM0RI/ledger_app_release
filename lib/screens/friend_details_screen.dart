@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/borrowed_item.dart';
 import '../models/friend.dart';
 import '../models/transaction.dart';
+import '../widgets/statement_dialog.dart';
 
 class FriendDetailsPage extends StatefulWidget {
   final Friend friend;
@@ -114,12 +115,23 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
                 ),
                 child: const Text("SAVE", style: TextStyle(color: Colors.white)),
                 onPressed: () {
-                  final amountStr = _amountController.text;
-                  final reason = _reasonController.text;
+                  final amountStr = _amountController.text.trim();
+                  final reason = _reasonController.text.trim();
 
                   if (amountStr.isEmpty) return;
 
-                  double amount = double.tryParse(amountStr) ?? 0.0;
+                  final parsedAmount = double.tryParse(amountStr);
+                  if (parsedAmount == null || parsedAmount <= 0) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Please enter a valid amount greater than 0."),
+                        backgroundColor: Color(0xFFD71921),
+                      ),
+                    );
+                    return;
+                  }
+
+                  double amount = parsedAmount;
 
                   // Apply Toggle Logic
                   if (isGiving) {
@@ -178,7 +190,6 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
                     controller: _itemNameController,
                     decoration: const InputDecoration(
                       labelText: "OBJECT / ITEM NAME",
-                      hintText: "e.g. Charger, Book, Tool",
                     ),
                     autofocus: true,
                   ),
@@ -187,7 +198,6 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
                     controller: _itemNotesController,
                     decoration: const InputDecoration(
                       labelText: "NOTES (OPTIONAL)",
-                      hintText: "e.g. 65W fast charger",
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -356,6 +366,419 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
     );
   }
 
+  void _openStatementDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => StatementDialog(
+        friend: widget.friend,
+        isDark: widget.isDark,
+      ),
+    );
+  }
+
+  void _showTransactionActions(Transaction tx) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: widget.isDark ? const Color(0xFF1E1E1E) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.receipt_long,
+                        color: widget.isDark ? Colors.white70 : Colors.black87,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        "TRANSACTION RECORD",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                          fontSize: 13,
+                          color: widget.isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        "${tx.amount >= 0 ? '+' : ''}${tx.amount.toStringAsFixed(2)} MAD",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'Courier',
+                          fontSize: 14,
+                          color: tx.amount >= 0 ? Colors.green : const Color(0xFFD71921),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.edit_note, color: Colors.blue),
+                  title: const Text("Correct / Amend Transaction"),
+                  subtitle: const Text(
+                    "Fix accidental amount or details while preserving audit history",
+                    style: TextStyle(fontSize: 11),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _correctTransactionDialog(tx);
+                  },
+                ),
+                ListTile(
+                  leading: Icon(
+                    Icons.history,
+                    color: tx.isEdited ? Colors.amber : Colors.grey,
+                  ),
+                  title: Text(
+                    tx.isEdited
+                        ? "View Correction History (${tx.editHistory.length} edit${tx.editHistory.length > 1 ? 's' : ''})"
+                        : "View Audit Status",
+                  ),
+                  subtitle: Text(
+                    tx.isEdited
+                        ? "Inspect timestamped timeline of past changes"
+                        : "Original entry • No modifications made yet",
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showCorrectionHistoryDialog(tx);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _correctTransactionDialog(Transaction tx) {
+    final amtController =
+        TextEditingController(text: tx.amount.abs().toStringAsFixed(2));
+    final reasonController = TextEditingController(text: tx.reason);
+    final noteController = TextEditingController();
+    bool isGiving = tx.amount < 0; // false = lent (+), true = borrowed (-)
+    String? validationError;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final activeColor =
+              isGiving ? const Color(0xFFD71921) : Colors.green;
+
+          return AlertDialog(
+            backgroundColor:
+                widget.isDark ? const Color(0xFF111111) : Colors.white,
+            title: Row(
+              children: [
+                const Icon(Icons.edit_note, color: Colors.blue),
+                const SizedBox(width: 8),
+                Text(
+                  "CORRECT ENTRY",
+                  style: TextStyle(
+                    color: widget.isDark ? Colors.white : Colors.black,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Accidental entries cannot be deleted to preserve financial authenticity. A permanent audit log will track this correction.",
+                    style: TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: amtController,
+                    decoration: const InputDecoration(
+                      labelText: "CORRECTED AMOUNT (MAD)",
+                    ),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    autofocus: true,
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: reasonController,
+                    decoration: const InputDecoration(labelText: "REASON"),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: noteController,
+                    decoration: const InputDecoration(
+                      labelText: "CORRECTION NOTE / JUSTIFICATION",
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    isGiving
+                        ? "I owe them (Borrowed money)"
+                        : "They owe me (Lent money)",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: activeColor,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Text("Lent (+)",
+                          style: TextStyle(color: Colors.grey, fontSize: 12)),
+                      Switch(
+                        activeThumbColor: const Color(0xFFD71921),
+                        inactiveThumbColor: Colors.green,
+                        activeTrackColor:
+                            const Color(0xFFD71921).withValues(alpha: 0.4),
+                        inactiveTrackColor: Colors.green.withValues(alpha: 0.4),
+                        value: isGiving,
+                        onChanged: (val) {
+                          setDialogState(() => isGiving = val);
+                        },
+                      ),
+                      const Text("Borrowed (-)",
+                          style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    ],
+                  ),
+                  if (validationError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      validationError!,
+                      style: const TextStyle(
+                        color: Color(0xFFD71921),
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                child:
+                    const Text("CANCEL", style: TextStyle(color: Colors.grey)),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: activeColor,
+                ),
+                child: const Text("RECORD CORRECTION",
+                    style: TextStyle(color: Colors.white)),
+                onPressed: () {
+                  final rawAmt = amtController.text.trim();
+                  final parsed = double.tryParse(rawAmt);
+                  if (parsed == null || parsed <= 0) {
+                    setDialogState(() => validationError =
+                        "Please enter a valid amount greater than 0.");
+                    return;
+                  }
+
+                  final newReason = reasonController.text.trim();
+                  final newAmt = isGiving ? -parsed.abs() : parsed.abs();
+                  final note = noteController.text.trim();
+
+                  setState(() {
+                    widget.friend.correctTransaction(
+                      tx,
+                      newAmt,
+                      newReason.isEmpty ? "Corrected Entry" : newReason,
+                      note: note.isEmpty ? null : note,
+                    );
+                  });
+
+                  widget.onSave();
+                  Navigator.pop(ctx);
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                          "Transaction corrected. Modification history recorded."),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                },
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showCorrectionHistoryDialog(Transaction tx) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor:
+            widget.isDark ? const Color(0xFF111111) : Colors.white,
+        title: Row(
+          children: [
+            const Icon(Icons.history, color: Colors.amber),
+            const SizedBox(width: 8),
+            Text(
+              "AUDIT HISTORY",
+              style: TextStyle(
+                color: widget.isDark ? Colors.white : Colors.black,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.2,
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "Original Created: ${tx.date.toString().substring(0, 16)}",
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                ),
+                const SizedBox(height: 10),
+                if (!tx.isEdited)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: widget.isDark
+                          ? const Color(0xFF1C1C1C)
+                          : const Color(0xFFF5F5F5),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.verified, color: Colors.green, size: 20),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            "This entry is authentic and has never been modified.",
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else ...[
+                  Text(
+                    "Modifications Log (${tx.editHistory.length}):",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: widget.isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ...List.generate(tx.editHistory.length, (i) {
+                    final edit = tx.editHistory[i];
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: widget.isDark
+                            ? const Color(0xFF1E1E1E)
+                            : const Color(0xFFF5F5F5),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: Colors.amber.withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment:
+                                MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                "Modification #${i + 1}",
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11,
+                                  color: Colors.amber,
+                                ),
+                              ),
+                              Text(
+                                edit.editedAt.toString().substring(0, 16),
+                                style: const TextStyle(
+                                    fontSize: 10, color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            "Previous: ${edit.previousAmount >= 0 ? '+' : ''}${edit.previousAmount.toStringAsFixed(2)} MAD (\"${edit.previousReason}\")",
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontFamily: 'Courier',
+                            ),
+                          ),
+                          if (edit.editNote != null &&
+                              edit.editNote!.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              "Note: ${edit.editNote}",
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontStyle: FontStyle.italic,
+                                color: widget.isDark
+                                    ? Colors.grey[300]
+                                    : Colors.grey[700],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 6),
+                  Text(
+                    "Current Value: ${tx.amount >= 0 ? '+' : ''}${tx.amount.toStringAsFixed(2)} MAD (\"${tx.reason}\")",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      fontFamily: 'Courier',
+                      color: tx.amount >= 0 ? Colors.green : const Color(0xFFD71921),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            child: const Text("CLOSE",
+                style: TextStyle(color: Color(0xFFD71921))),
+            onPressed: () => Navigator.pop(ctx),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final headerColor =
@@ -373,6 +796,11 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
           style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.description_outlined),
+            tooltip: "Account Statement",
+            onPressed: _openStatementDialog,
+          ),
           if (widget.friend.amountOwed.abs() > 0.01)
             IconButton(
               icon: const Icon(Icons.handshake),
@@ -466,6 +894,8 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
                             horizontal: 20,
                             vertical: 4,
                           ),
+                          onLongPress: () => _showTransactionActions(tx),
+                          onTap: () => _showTransactionActions(tx),
                           leading: Icon(
                             tx.amount >= 0
                                 ? Icons.arrow_back
@@ -473,18 +903,64 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
                             color:
                                 tx.amount >= 0 ? Colors.green : moneyColor,
                           ),
-                          title: Text(
-                            tx.reason,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: widget.isDark
-                                  ? Colors.white
-                                  : Colors.black,
-                            ),
+                          title: Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  tx.reason,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: widget.isDark
+                                        ? Colors.white
+                                        : Colors.black,
+                                  ),
+                                ),
+                              ),
+                              if (tx.isEdited) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                    vertical: 1.5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: Colors.amber.withValues(alpha: 0.6),
+                                      width: 0.8,
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    "AMENDED",
+                                    style: TextStyle(
+                                      color: Colors.amber,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
-                          subtitle: Text(
-                            tx.date.toString().substring(0, 16),
-                            style: const TextStyle(color: Colors.grey),
+                          subtitle: Row(
+                            children: [
+                              Text(
+                                tx.date.toString().substring(0, 16),
+                                style: const TextStyle(color: Colors.grey),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                tx.isEdited
+                                    ? "• Hold to view history"
+                                    : "• Hold to correct",
+                                style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
                           ),
                           trailing: Text(
                             "${tx.amount.toStringAsFixed(2)} MAD",
