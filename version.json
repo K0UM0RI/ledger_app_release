@@ -1,6 +1,6 @@
 {
-    "version":  "1.4.3",
-    "buildNumber":  1007,
-    "downloadUrl":  "https://raw.githubusercontent.com/K0UM0RI/ledger_app_release/main/ledger-v1.4.3.apk",
-    "releaseNotes":  "Inline duplicate friend error in input bar, allow 0-transaction friend creation, and open friend details directly on creation."
+    "version":  "1.4.4",
+    "buildNumber":  1008,
+    "downloadUrl":  "https://raw.githubusercontent.com/K0UM0RI/ledger_app_release/main/ledger-v1.4.4.apk",
+    "releaseNotes":  "Replaced Borrowed Objects tab with built-in Quick Calculator that pre-fills transaction amounts."
 }

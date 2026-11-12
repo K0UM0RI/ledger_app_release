@@ -10,13 +10,13 @@ Ledger helps you easily track who owes you and who you owe with friends and fami
 
 Directly download the stable release APK:
 
-### [Download ledger-v1.4.3.apk](./ledger-v1.4.3.apk)
+### [Download ledger-v1.4.4.apk](./ledger-v1.4.4.apk)
 
 ---
 
 ## Installation Guide (Android)
 
-1. Download **[ledger-v1.4.3.apk](./ledger-v1.4.3.apk)** above.
+1. Download **[ledger-v1.4.4.apk](./ledger-v1.4.4.apk)** above.
 2. Open the downloaded file on your Android phone.
 3. If prompted:
    - Tap **Settings** when Android warns about installing from unknown sources.
@@ -32,32 +32,12 @@ Directly download the stable release APK:
 - **100% Offline & Private**: Zero network requests. All data stays strictly on your local device.
 - **Zero Ads**: Completely distraction-free and free forever.
 - **Dark & Light Mode**: Automatically adapts or toggle your preference in Settings.
-- **PDF Statements**: Generate and share clean, paginated PDF account statements (transactions, totals, and borrowed objects) directly via standard Android share sheet.
+- **PDF Statements**: Generate and share clean, paginated PDF account statements directly via standard Android share sheet.
 - **Non-Destructive Accounting**: Accidental entries can be corrected repeatedly while preserving an immutable audit trail (editHistory) for full authenticity.
-- **Physical Object Tracker**: Track books, tools, and personal belongings borrowed or lent alongside monetary debt.
+- **Built-in Quick Calculator**: Calculate split bills or multiple items inside a friend's window and pre-fill the transaction amount with one tap.
 - **Full Data Portability**: Export and import your data anytime as transparent JSON backups with one-tap copy & paste.
 - **Detailed History**: View sorted transaction histories and settle up balances with a single tap.
 - **In-App Updates**: Check for new releases directly from Settings and update with one tap.
-
----
-
-## User Guide
-
-### Adding Friends & Transactions
-1. Tap the **+** button on the home screen to add a friend.
-2. Tap on any friend's card to view their transaction history.
-3. Tap **Add Transaction** to record an amount (specify whether you lent money or borrowed money).
-4. When a debt is paid off, tap **Settle Up** to balance the account.
-
-### Backup & Restore
-- **Export Backup**: Go to **Settings** -> **Export Data**. You can copy the JSON directly to your clipboard or save it.
-- **Restore Backup**: Go to **Settings** -> **Import Data**. Paste your JSON backup to restore your friends and transactions. You can choose to **Merge** with existing records or **Replace** everything.
-
----
-
-## Privacy Policy
-
-Ledger does **not** collect, store, transmit, or share any personal information. All your data resides solely in local device storage. No internet permission is used for telemetry or tracking.
 
 ---
 

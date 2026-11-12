@@ -246,53 +246,6 @@ class PdfService {
               },
               cellStyle: const pw.TextStyle(fontSize: 9),
             ),
-
-            // --- BORROWED & LENT OBJECTS (if any) ---
-            if (friend.borrowedItems.isNotEmpty) ...[
-              pw.SizedBox(height: 18),
-              pw.Text(
-                'OBJECTS',
-                style: pw.TextStyle(
-                  fontSize: 11,
-                  fontWeight: pw.FontWeight.bold,
-                  letterSpacing: 1.2,
-                ),
-              ),
-              pw.SizedBox(height: 6),
-              pw.TableHelper.fromTextArray(
-                border: pw.TableBorder(
-                  horizontalInside: pw.BorderSide(color: lightGrey, width: 0.5),
-                  bottom: pw.BorderSide(color: lightGrey, width: 0.5),
-                ),
-                headerStyle: pw.TextStyle(
-                  fontSize: 9,
-                  fontWeight: pw.FontWeight.bold,
-                  color: PdfColors.white,
-                ),
-                headerDecoration:
-                    const pw.BoxDecoration(color: PdfColors.black),
-                headerHeight: 22,
-                cellHeight: 22,
-                cellPadding:
-                    const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                columnWidths: {
-                  0: const pw.FlexColumnWidth(3),
-                  1: const pw.FixedColumnWidth(80),
-                  2: const pw.FixedColumnWidth(70),
-                },
-                headers: ['ITEM', 'TYPE', 'STATUS'],
-                data: List<List<String>>.generate(
-                  friend.borrowedItems.length,
-                  (index) {
-                    final item = friend.borrowedItems[index];
-                    final type = item.isLentByMe ? 'Lent out' : 'Borrowed';
-                    final status = item.isReturned ? 'Returned' : 'Active';
-                    return [item.name, type, status];
-                  },
-                ),
-                cellStyle: const pw.TextStyle(fontSize: 9),
-              ),
-            ],
           ];
         },
       ),

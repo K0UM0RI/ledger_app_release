@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../models/borrowed_item.dart';
 import '../models/friend.dart';
 import '../models/transaction.dart';
 import '../services/pdf_service.dart';
@@ -7,7 +6,7 @@ import '../services/pdf_service.dart';
 class FriendDetailsPage extends StatefulWidget {
   final Friend friend;
   final VoidCallback onSave;
-  final VoidCallback? onDelete; // Callback when friend is deleted
+  final VoidCallback? onDelete;
   final bool isDark;
 
   const FriendDetailsPage({
@@ -26,10 +25,11 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
     with SingleTickerProviderStateMixin {
   final _amountController = TextEditingController();
   final _reasonController = TextEditingController();
-  final _itemNameController = TextEditingController();
-  final _itemNotesController = TextEditingController();
 
   late TabController _tabController;
+
+  // Calculator state
+  String _calcExpression = '';
 
   @override
   void initState() {
@@ -44,138 +44,208 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
   void dispose() {
     _amountController.dispose();
     _reasonController.dispose();
-    _itemNameController.dispose();
-    _itemNotesController.dispose();
     _tabController.dispose();
     super.dispose();
   }
 
-  void _addTransaction() {
-    bool isGiving = false;
+  // --- CALCULATOR LOGIC ---
+  double? _evaluateExpression(String expr) {
+    String sanitized = expr
+        .replaceAll(' ', '')
+        .replaceAll('×', '*')
+        .replaceAll('÷', '/');
+
+    while (sanitized.isNotEmpty &&
+        '+-*/.'.contains(sanitized[sanitized.length - 1])) {
+      sanitized = sanitized.substring(0, sanitized.length - 1);
+    }
+
+    if (sanitized.isEmpty) return null;
+
+    final List<String> tokens = [];
+    final buffer = StringBuffer();
+
+    for (int i = 0; i < sanitized.length; i++) {
+      final ch = sanitized[i];
+      if ('+-*/'.contains(ch)) {
+        if (i == 0 && (ch == '-' || ch == '+')) {
+          buffer.write(ch);
+        } else if (buffer.isEmpty && (ch == '-' || ch == '+')) {
+          buffer.write(ch);
+        } else {
+          if (buffer.isNotEmpty) {
+            tokens.add(buffer.toString());
+            buffer.clear();
+          }
+          tokens.add(ch);
+        }
+      } else {
+        buffer.write(ch);
+      }
+    }
+    if (buffer.isNotEmpty) {
+      tokens.add(buffer.toString());
+    }
+
+    if (tokens.isEmpty) return null;
+
+    // First pass: * and /
+    final List<String> pass1 = [];
+    int i = 0;
+    while (i < tokens.length) {
+      final token = tokens[i];
+      if ((token == '*' || token == '/') &&
+          pass1.isNotEmpty &&
+          i + 1 < tokens.length) {
+        final left = double.tryParse(pass1.removeLast());
+        final right = double.tryParse(tokens[i + 1]);
+        if (left == null || right == null) return null;
+        if (token == '/' && right == 0) return null;
+        final res = token == '*' ? left * right : left / right;
+        pass1.add(res.toString());
+        i += 2;
+      } else {
+        pass1.add(token);
+        i++;
+      }
+    }
+
+    // Second pass: + and -
+    double? total = double.tryParse(pass1.first);
+    if (total == null) return null;
+
+    int j = 1;
+    while (j + 1 < pass1.length) {
+      final op = pass1[j];
+      final val = double.tryParse(pass1[j + 1]);
+      if (val == null) return null;
+      if (op == '+') {
+        total = total! + val;
+      } else if (op == '-') {
+        total = total! - val;
+      }
+      j += 2;
+    }
+
+    return total;
+  }
+
+  String _formatCalcNumber(double val) {
+    if (val == val.roundToDouble()) {
+      return val.toInt().toString();
+    }
+    return val.toStringAsFixed(2);
+  }
+
+  void _onCalcKeyPress(String key) {
+    setState(() {
+      if (key == 'C') {
+        _calcExpression = '';
+        return;
+      }
+      if (key == '⌫') {
+        if (_calcExpression.isNotEmpty) {
+          _calcExpression =
+              _calcExpression.substring(0, _calcExpression.length - 1);
+        }
+        return;
+      }
+      if (key == '=') {
+        final result = _evaluateExpression(_calcExpression);
+        if (result != null) {
+          _calcExpression = _formatCalcNumber(result);
+        }
+        return;
+      }
+
+      const operators = ['+', '-', '×', '÷'];
+      if (operators.contains(key)) {
+        if (_calcExpression.isEmpty) {
+          if (key == '-') {
+            _calcExpression = '-';
+          }
+          return;
+        }
+        final lastChar = _calcExpression[_calcExpression.length - 1];
+        if (operators.contains(lastChar)) {
+          _calcExpression =
+              _calcExpression.substring(0, _calcExpression.length - 1) + key;
+          return;
+        }
+        if (lastChar == '.') {
+          return;
+        }
+        _calcExpression += key;
+        return;
+      }
+
+      if (key == '.') {
+        // Prevent multiple decimals in the current number segment
+        final parts = _calcExpression.split(RegExp(r'[+\-×÷]'));
+        final currentSegment = parts.isNotEmpty ? parts.last : '';
+        if (currentSegment.contains('.')) return;
+        if (currentSegment.isEmpty) {
+          _calcExpression += '0.';
+        } else {
+          _calcExpression += '.';
+        }
+        return;
+      }
+
+      _calcExpression += key;
+    });
+  }
+
+  void _validateCalculatorAmount() {
+    final result = _evaluateExpression(_calcExpression);
+    if (result == null || result == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Calculate a non-zero amount first."),
+          backgroundColor: Color(0xFFD71921),
+        ),
+      );
+      return;
+    }
+
+    final formattedAmt = _formatCalcNumber(result.abs());
+    final initialIsGiving = result < 0;
+
+    _tabController.animateTo(0);
+    _addTransaction(
+      prefilledAmount: formattedAmt,
+      initialIsGiving: initialIsGiving,
+      clearCalculatorOnSave: true,
+    );
+  }
+
+  void _addTransaction({
+    String? prefilledAmount,
+    bool initialIsGiving = false,
+    bool clearCalculatorOnSave = false,
+  }) {
+    if (prefilledAmount != null) {
+      _amountController.text = prefilledAmount;
+    } else {
+      _amountController.clear();
+    }
+    _reasonController.clear();
+
+    bool isGiving = initialIsGiving;
+    String? amountError;
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
+          final statusColor =
+              isGiving ? const Color(0xFFD71921) : Colors.green;
+
           return AlertDialog(
             backgroundColor:
                 widget.isDark ? const Color(0xFF111111) : Colors.white,
             title: Text(
               "ADD TRANSACTION",
-              style: TextStyle(
-                color: widget.isDark ? Colors.white : Colors.black,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: _amountController,
-                  decoration: const InputDecoration(labelText: "AMOUNT"),
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  autofocus: true,
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _reasonController,
-                  decoration: const InputDecoration(labelText: "REASON"),
-                ),
-                const SizedBox(height: 20),
-
-                // --- TOGGLE SWITCH ---
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Switch(
-                      activeThumbColor: Colors.red,
-                      inactiveThumbColor: Colors.green,
-                      activeTrackColor: Colors.red.withValues(alpha: 0.5),
-                      inactiveTrackColor: Colors.green.withValues(alpha: 0.5),
-                      value: isGiving,
-                      onChanged: (val) {
-                        setDialogState(() {
-                          isGiving = val;
-                        });
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                child: const Text("CANCEL", style: TextStyle(color: Colors.grey)),
-                onPressed: () => Navigator.pop(context),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isGiving ? Colors.red : Colors.green,
-                ),
-                child: const Text("SAVE", style: TextStyle(color: Colors.white)),
-                onPressed: () {
-                  final amountStr = _amountController.text.trim();
-                  final reason = _reasonController.text.trim();
-
-                  if (amountStr.isEmpty) return;
-
-                  final parsedAmount = double.tryParse(amountStr);
-                  if (parsedAmount == null || parsedAmount <= 0) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text("Please enter a valid amount greater than 0."),
-                        backgroundColor: Color(0xFFD71921),
-                      ),
-                    );
-                    return;
-                  }
-
-                  double amount = parsedAmount;
-
-                  // Apply Toggle Logic
-                  if (isGiving) {
-                    amount = -amount.abs();
-                  } else {
-                    amount = amount.abs();
-                  }
-
-                  setState(() {
-                    widget.friend.addTransaction(
-                      Transaction(
-                        amount: amount,
-                        date: DateTime.now(),
-                        reason: reason.isEmpty ? "Payment" : reason,
-                      ),
-                    );
-                  });
-
-                  widget.onSave();
-
-                  _amountController.clear();
-                  _reasonController.clear();
-                  Navigator.pop(context);
-                },
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  void _addBorrowedItem() {
-    bool isLentByMe = true;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            backgroundColor:
-                widget.isDark ? const Color(0xFF111111) : Colors.white,
-            title: Text(
-              "BORROW / LEND OBJECT",
               style: TextStyle(
                 color: widget.isDark ? Colors.white : Colors.black,
                 fontWeight: FontWeight.bold,
@@ -187,50 +257,66 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   TextField(
-                    controller: _itemNameController,
-                    decoration: const InputDecoration(
-                      labelText: "OBJECT / ITEM NAME",
+                    controller: _amountController,
+                    decoration: InputDecoration(
+                      labelText: "AMOUNT (MAD)",
+                      errorText: amountError,
+                      errorStyle: const TextStyle(
+                        color: Color(0xFFD71921),
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                    autofocus: true,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    autofocus: prefilledAmount == null,
+                    onChanged: (_) {
+                      if (amountError != null) {
+                        setDialogState(() => amountError = null);
+                      }
+                    },
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   TextField(
-                    controller: _itemNotesController,
-                    decoration: const InputDecoration(
-                      labelText: "NOTES (OPTIONAL)",
-                    ),
+                    controller: _reasonController,
+                    decoration: const InputDecoration(labelText: "REASON"),
+                    autofocus: prefilledAmount != null,
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    isLentByMe
-                        ? "I lent this to ${widget.friend.name}"
-                        : "I borrowed this from ${widget.friend.name}",
+                    isGiving
+                        ? "I owe them (Borrowed money)"
+                        : "They owe me (Lent money)",
                     style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: isLentByMe
-                          ? const Color(0xFFD71921)
-                          : Colors.green,
+                      fontWeight: FontWeight.bold,
                       fontSize: 13,
+                      color: statusColor,
                     ),
                   ),
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      const Text("Borrowed", style: TextStyle(color: Colors.grey)),
+                      const Text(
+                        "Lent (+)",
+                        style: TextStyle(color: Colors.grey, fontSize: 13),
+                      ),
                       Switch(
                         activeThumbColor: const Color(0xFFD71921),
                         inactiveThumbColor: Colors.green,
                         activeTrackColor:
                             const Color(0xFFD71921).withValues(alpha: 0.4),
-                        inactiveTrackColor: Colors.green.withValues(alpha: 0.4),
-                        value: isLentByMe,
+                        inactiveTrackColor:
+                            Colors.green.withValues(alpha: 0.4),
+                        value: isGiving,
                         onChanged: (val) {
                           setDialogState(() {
-                            isLentByMe = val;
+                            isGiving = val;
                           });
                         },
                       ),
-                      const Text("Lent out", style: TextStyle(color: Colors.grey)),
+                      const Text(
+                        "Borrowed (-)",
+                        style: TextStyle(color: Colors.grey, fontSize: 13),
+                      ),
                     ],
                   ),
                 ],
@@ -238,38 +324,49 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
             ),
             actions: [
               TextButton(
-                child: const Text("CANCEL", style: TextStyle(color: Colors.grey)),
-                onPressed: () {
-                  _itemNameController.clear();
-                  _itemNotesController.clear();
-                  Navigator.pop(context);
-                },
+                child:
+                    const Text("CANCEL", style: TextStyle(color: Colors.grey)),
+                onPressed: () => Navigator.pop(context),
               ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFD71921),
+                  backgroundColor: statusColor,
                 ),
-                child: const Text("SAVE", style: TextStyle(color: Colors.white)),
+                child:
+                    const Text("SAVE", style: TextStyle(color: Colors.white)),
                 onPressed: () {
-                  final name = _itemNameController.text.trim();
-                  if (name.isEmpty) return;
+                  final amountStr = _amountController.text.trim();
+                  final reason = _reasonController.text.trim();
 
-                  final newItem = BorrowedItem(
-                    id: DateTime.now().millisecondsSinceEpoch.toString(),
-                    name: name,
-                    date: DateTime.now(),
-                    isLentByMe: isLentByMe,
-                    notes: _itemNotesController.text.trim(),
-                  );
+                  final parsedAmount = double.tryParse(amountStr);
+                  if (parsedAmount == null || parsedAmount <= 0) {
+                    setDialogState(
+                      () => amountError =
+                          "Please enter a valid amount greater than 0.",
+                    );
+                    return;
+                  }
+
+                  final double amount =
+                      isGiving ? -parsedAmount.abs() : parsedAmount.abs();
 
                   setState(() {
-                    widget.friend.addBorrowedItem(newItem);
+                    widget.friend.addTransaction(
+                      Transaction(
+                        amount: amount,
+                        date: DateTime.now(),
+                        reason: reason.isEmpty ? "Payment" : reason,
+                      ),
+                    );
+                    if (clearCalculatorOnSave) {
+                      _calcExpression = '';
+                    }
                   });
 
                   widget.onSave();
 
-                  _itemNameController.clear();
-                  _itemNotesController.clear();
+                  _amountController.clear();
+                  _reasonController.clear();
                   Navigator.pop(context);
                 },
               ),
@@ -293,7 +390,7 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
           ),
         ),
         content: Text(
-          "Are you sure you want to delete ${widget.friend.name}? This will remove all transactions and borrowed objects.",
+          "Are you sure you want to delete ${widget.friend.name}? This will remove all transactions.",
           style: TextStyle(
             color: widget.isDark ? Colors.grey : Colors.black87,
           ),
@@ -309,11 +406,11 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
             ),
             child: const Text("DELETE", style: TextStyle(color: Colors.white)),
             onPressed: () {
-              Navigator.pop(context); // Close dialog
+              Navigator.pop(context);
               if (widget.onDelete != null) {
-                widget.onDelete!(); // Trigger deletion
+                widget.onDelete!();
               }
-              Navigator.pop(context); // Close friend details page
+              Navigator.pop(context);
             },
           ),
         ],
@@ -560,15 +657,235 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
     );
   }
 
+  Widget _buildCalcButton(
+    String label, {
+    Color? textColor,
+    Color? bgColor,
+    int flex = 1,
+  }) {
+    final defaultBg =
+        widget.isDark ? const Color(0xFF1A1A1A) : Colors.grey[200]!;
+    final defaultText = widget.isDark ? Colors.white : Colors.black87;
+
+    return Expanded(
+      flex: flex,
+      child: Padding(
+        padding: const EdgeInsets.all(4.0),
+        child: SizedBox.expand(
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: bgColor ?? defaultBg,
+              foregroundColor: textColor ?? defaultText,
+              elevation: 0,
+              padding: EdgeInsets.zero,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () => _onCalcKeyPress(label),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'Courier',
+                color: textColor ?? defaultText,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCalculatorTab(Color? headerColor, Color? headerTextColor) {
+    final liveResult = _evaluateExpression(_calcExpression);
+    final resultText =
+        liveResult != null ? "${liveResult.toStringAsFixed(2)} MAD" : "0.00 MAD";
+
+    const accentRed = Color(0xFFD71921);
+    final opBg = widget.isDark ? const Color(0xFF262626) : Colors.grey[300]!;
+
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          color: headerColor,
+          width: double.infinity,
+          child: Text(
+            "AMOUNT CALCULATOR",
+            style: TextStyle(
+              color: headerTextColor,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 2,
+              fontSize: 12,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Column(
+              children: [
+                // Display Screen
+                Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: widget.isDark
+                        ? const Color(0xFF121212)
+                        : Colors.grey[100],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: widget.isDark ? Colors.white12 : Colors.black12,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        reverse: true,
+                        child: Text(
+                          _calcExpression.isEmpty ? "0" : _calcExpression,
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontFamily: 'Courier',
+                            color:
+                                widget.isDark ? Colors.white70 : Colors.black54,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        "= $resultText",
+                        style: TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'Courier',
+                          color: liveResult != null && liveResult < 0
+                              ? accentRed
+                              : Colors.green,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Keypad (flexes to fit screen without scrolling)
+                Expanded(
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            _buildCalcButton('C', textColor: accentRed, bgColor: opBg),
+                            _buildCalcButton('⌫', bgColor: opBg),
+                            _buildCalcButton('÷', textColor: accentRed, bgColor: opBg),
+                            _buildCalcButton('×', textColor: accentRed, bgColor: opBg),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            _buildCalcButton('7'),
+                            _buildCalcButton('8'),
+                            _buildCalcButton('9'),
+                            _buildCalcButton('-', textColor: accentRed, bgColor: opBg),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            _buildCalcButton('4'),
+                            _buildCalcButton('5'),
+                            _buildCalcButton('6'),
+                            _buildCalcButton('+', textColor: accentRed, bgColor: opBg),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            _buildCalcButton('1'),
+                            _buildCalcButton('2'),
+                            _buildCalcButton('3'),
+                            _buildCalcButton('=', textColor: Colors.white, bgColor: Colors.green),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            _buildCalcButton('0', flex: 2),
+                            _buildCalcButton('.'),
+                            Expanded(
+                              flex: 1,
+                              child: Padding(
+                                padding: const EdgeInsets.all(4.0),
+                                child: SizedBox.expand(
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: accentRed,
+                                      foregroundColor: Colors.white,
+                                      elevation: 0,
+                                      padding: EdgeInsets.zero,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                    onPressed: _validateCalculatorAmount,
+                                    child: const Icon(Icons.check, size: 24, color: Colors.white),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 46,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: accentRed,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          onPressed: _validateCalculatorAmount,
+                          icon: const Icon(Icons.add_card, color: Colors.white),
+                          label: const Text(
+                            "USE AMOUNT & ADD TRANSACTION",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final headerColor =
         widget.isDark ? const Color(0xFF1A1A1A) : Colors.grey[200];
     final headerTextColor = widget.isDark ? Colors.white54 : Colors.grey[600];
     final moneyColor = widget.isDark ? const Color(0xFFD71921) : Colors.red;
-
-    final unreturnedCount =
-        widget.friend.borrowedItems.where((i) => !i.isReturned).length;
 
     return Scaffold(
       appBar: AppBar(
@@ -622,9 +939,9 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
               icon: const Icon(Icons.receipt_long, size: 20),
               text: "MONEY (${widget.friend.transactions.length})",
             ),
-            Tab(
-              icon: const Icon(Icons.inventory_2_outlined, size: 20),
-              text: "OBJECTS ($unreturnedCount)",
+            const Tab(
+              icon: Icon(Icons.calculate_outlined, size: 20),
+              text: "CALCULATOR",
             ),
           ],
         ),
@@ -717,226 +1034,18 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
             ],
           ),
 
-          // --- TAB 2: BORROWED OBJECTS ---
-          Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                color: headerColor,
-                width: double.infinity,
-                child: Text(
-                  "BORROWED & LENT OBJECTS",
-                  style: TextStyle(
-                    color: headerTextColor,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 2,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-              Expanded(
-                child: widget.friend.borrowedItems.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.inventory_2_outlined,
-                              size: 48,
-                              color: widget.isDark
-                                  ? Colors.white24
-                                  : Colors.black26,
-                            ),
-                            const SizedBox(height: 12),
-                            const Text(
-                              "No borrowed objects tracked yet.",
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              "Tap '+' below to record a charger, book, or tool.",
-                              style: TextStyle(
-                                color: widget.isDark
-                                    ? Colors.white38
-                                    : Colors.black45,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: widget.friend.borrowedItems.length,
-                        itemBuilder: (context, index) {
-                          // Sort: Unreturned first, then newest
-                          final sortedItems = [
-                            ...widget.friend.borrowedItems,
-                          ]..sort((a, b) {
-                              if (a.isReturned != b.isReturned) {
-                                return a.isReturned ? 1 : -1;
-                              }
-                              return b.date.compareTo(a.date);
-                            });
-
-                          final item = sortedItems[index];
-
-                          return Card(
-                            margin: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 6,
-                            ),
-                            color: widget.isDark
-                                ? (item.isReturned
-                                    ? const Color(0xFF111111)
-                                    : const Color(0xFF1E1E1E))
-                                : (item.isReturned
-                                    ? Colors.grey[100]
-                                    : Colors.white),
-                            elevation: item.isReturned ? 0 : 2,
-                            child: ListTile(
-                              leading: IconButton(
-                                icon: Icon(
-                                  item.isReturned
-                                      ? Icons.check_circle
-                                      : Icons.radio_button_unchecked,
-                                  color: item.isReturned
-                                      ? Colors.green
-                                      : const Color(0xFFD71921),
-                                  size: 28,
-                                ),
-                                tooltip: item.isReturned
-                                    ? "Mark as unreturned"
-                                    : "Mark as returned",
-                                onPressed: () {
-                                  setState(() {
-                                    widget.friend.toggleBorrowedItem(item.id);
-                                  });
-                                  widget.onSave();
-                                },
-                              ),
-                              title: Text(
-                                item.name,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                  decoration: item.isReturned
-                                      ? TextDecoration.lineThrough
-                                      : null,
-                                  color: item.isReturned
-                                      ? Colors.grey
-                                      : (widget.isDark
-                                          ? Colors.white
-                                          : Colors.black),
-                                ),
-                              ),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const SizedBox(height: 2),
-                                  Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: item.isLentByMe
-                                              ? const Color(0xFFD71921)
-                                                  .withValues(alpha: 0.15)
-                                              : Colors.green
-                                                  .withValues(alpha: 0.15),
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          item.isLentByMe
-                                              ? "LENT OUT"
-                                              : "BORROWED",
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: item.isLentByMe
-                                                ? const Color(0xFFD71921)
-                                                : Colors.green,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        item.isReturned
-                                            ? "Returned"
-                                            : "Active",
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: item.isReturned
-                                              ? Colors.green
-                                              : Colors.grey,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  if (item.notes.isNotEmpty) ...[
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      item.notes,
-                                      style: TextStyle(
-                                        color: widget.isDark
-                                            ? Colors.white60
-                                            : Colors.black54,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    item.date.toString().substring(0, 10),
-                                    style: const TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 10,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              trailing: IconButton(
-                                icon: const Icon(
-                                  Icons.delete_outline,
-                                  color: Colors.grey,
-                                  size: 20,
-                                ),
-                                tooltip: "Remove item",
-                                onPressed: () {
-                                  setState(() {
-                                    widget.friend.removeBorrowedItem(item.id);
-                                  });
-                                  widget.onSave();
-                                },
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
+          // --- TAB 2: CALCULATOR ---
+          _buildCalculatorTab(headerColor, headerTextColor),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _tabController.index == 0
-            ? _addTransaction
-            : _addBorrowedItem,
-        backgroundColor: const Color(0xFFD71921),
-        tooltip: _tabController.index == 0
-            ? "Add Transaction"
-            : "Add Borrowed Object",
-        child: Icon(
-          _tabController.index == 0 ? Icons.add_card : Icons.add_box_outlined,
-        ),
-      ),
+      floatingActionButton: _tabController.index == 0
+          ? FloatingActionButton(
+              onPressed: () => _addTransaction(),
+              backgroundColor: const Color(0xFFD71921),
+              tooltip: "Add Transaction",
+              child: const Icon(Icons.add_card),
+            )
+          : null,
     );
   }
 }

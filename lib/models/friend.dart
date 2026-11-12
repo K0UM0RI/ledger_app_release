@@ -1,4 +1,3 @@
-import 'borrowed_item.dart';
 import 'transaction.dart';
 
 class Friend {
@@ -7,7 +6,6 @@ class Friend {
   String emoji; // Profile picture emoji
   double amountOwed;
   final List<Transaction> transactions;
-  final List<BorrowedItem> borrowedItems;
 
   // Private constructor - used by factory methods
   Friend._({
@@ -16,7 +14,6 @@ class Friend {
     required this.emoji,
     required this.amountOwed,
     required this.transactions,
-    required this.borrowedItems,
   });
 
   // Factory for creating a new friend with optional initial transaction
@@ -26,7 +23,6 @@ class Friend {
     String? emoji,
     double initialTransaction = 0.0,
     String initialReason = '',
-    List<BorrowedItem>? borrowedItems,
   }) {
     final hasInitialTransaction =
         initialTransaction != 0.0 || initialReason.isNotEmpty;
@@ -44,7 +40,6 @@ class Friend {
               ),
             ]
           : <Transaction>[],
-      borrowedItems: borrowedItems ?? <BorrowedItem>[],
     );
   }
 
@@ -53,11 +48,6 @@ class Friend {
     final list = (json['transactions'] as List?) ?? <dynamic>[];
     List<Transaction> txList =
         list.map((i) => Transaction.fromJson(i as Map<String, dynamic>)).toList();
-
-    final borrowedList = (json['borrowedItems'] as List?) ?? <dynamic>[];
-    List<BorrowedItem> bList = borrowedList
-        .map((i) => BorrowedItem.fromJson(i as Map<String, dynamic>))
-        .toList();
 
     final num parsedAmountOwed = (json['amountOwed'] as num?) ?? 0;
     final String parsedName = (json['name'] as String?) ?? 'Unknown';
@@ -71,7 +61,6 @@ class Friend {
           (parsedName.isNotEmpty ? parsedName[0].toUpperCase() : '👤'),
       amountOwed: parsedAmountOwed.toDouble(),
       transactions: txList,
-      borrowedItems: bList,
     );
   }
 
@@ -95,32 +84,11 @@ class Friend {
     amountOwed += diff;
   }
 
-  void addBorrowedItem(BorrowedItem item) {
-    borrowedItems.add(item);
-  }
-
-  void toggleBorrowedItem(String itemId) {
-    final idx = borrowedItems.indexWhere((item) => item.id == itemId);
-    if (idx != -1) {
-      final old = borrowedItems[idx];
-      final newStatus = !old.isReturned;
-      borrowedItems[idx] = old.copyWith(
-        isReturned: newStatus,
-        returnedDate: newStatus ? DateTime.now() : null,
-      );
-    }
-  }
-
-  void removeBorrowedItem(String itemId) {
-    borrowedItems.removeWhere((item) => item.id == itemId);
-  }
-
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,
     'emoji': emoji,
     'amountOwed': amountOwed,
     'transactions': transactions.map((t) => t.toJson()).toList(),
-    'borrowedItems': borrowedItems.map((b) => b.toJson()).toList(),
   };
 }
