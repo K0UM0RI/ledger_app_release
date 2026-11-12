@@ -19,27 +19,31 @@ class Friend {
     required this.borrowedItems,
   });
 
-  // Factory for creating a new friend with initial transaction
+  // Factory for creating a new friend with optional initial transaction
   factory Friend({
     required String id,
     required String name,
     String? emoji,
-    required double initialTransaction,
-    required String initialReason,
+    double initialTransaction = 0.0,
+    String initialReason = '',
     List<BorrowedItem>? borrowedItems,
   }) {
+    final hasInitialTransaction =
+        initialTransaction != 0.0 || initialReason.isNotEmpty;
     return Friend._(
       id: id,
       name: name,
       emoji: emoji ?? (name.isNotEmpty ? name[0].toUpperCase() : '👤'),
       amountOwed: initialTransaction,
-      transactions: [
-        Transaction(
-          amount: initialTransaction,
-          date: DateTime.now(),
-          reason: initialReason,
-        ),
-      ],
+      transactions: hasInitialTransaction
+          ? [
+              Transaction(
+                amount: initialTransaction,
+                date: DateTime.now(),
+                reason: initialReason.isEmpty ? 'Initial' : initialReason,
+              ),
+            ]
+          : <Transaction>[],
       borrowedItems: borrowedItems ?? <BorrowedItem>[],
     );
   }

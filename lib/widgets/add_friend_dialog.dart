@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 
 class AddFriendDialog extends StatefulWidget {
   final bool isDark;
+  final List<String> existingNames;
   final Function(String name, String amount, String reason, bool isGiving) onAdd;
 
   const AddFriendDialog({
     super.key,
     required this.isDark,
+    this.existingNames = const [],
     required this.onAdd,
   });
 
@@ -19,6 +21,8 @@ class _AddFriendDialogState extends State<AddFriendDialog> {
   final _amountController = TextEditingController();
   final _reasonController = TextEditingController();
   bool _isGiving = false;
+  String? _nameError;
+  String? _amountError;
 
   @override
   void dispose() {
@@ -27,8 +31,6 @@ class _AddFriendDialogState extends State<AddFriendDialog> {
     _reasonController.dispose();
     super.dispose();
   }
-
-  String? _errorMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -50,19 +52,48 @@ class _AddFriendDialogState extends State<AddFriendDialog> {
           children: [
             TextField(
               controller: _nameController,
-              decoration: const InputDecoration(labelText: "NAME"),
+              decoration: InputDecoration(
+                labelText: "NAME",
+                errorText: _nameError,
+                errorStyle: const TextStyle(
+                  color: Color(0xFFD71921),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               autofocus: true,
+              onChanged: (_) {
+                if (_nameError != null) {
+                  setState(() => _nameError = null);
+                }
+              },
             ),
             const SizedBox(height: 10),
             TextField(
               controller: _amountController,
-              decoration: const InputDecoration(labelText: "AMOUNT (MAD)"),
+              decoration: InputDecoration(
+                labelText: "AMOUNT (MAD)",
+                errorText: _amountError,
+                errorStyle: const TextStyle(
+                  color: Color(0xFFD71921),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              onChanged: (_) {
+                if (_amountError != null) {
+                  setState(() => _amountError = null);
+                }
+              },
             ),
             const SizedBox(height: 10),
             TextField(
               controller: _reasonController,
               decoration: const InputDecoration(labelText: "REASON (OPTIONAL)"),
+              onChanged: (_) {
+                if (_amountError != null) {
+                  setState(() => _amountError = null);
+                }
+              },
             ),
             const SizedBox(height: 16),
             Text(
@@ -94,17 +125,6 @@ class _AddFriendDialogState extends State<AddFriendDialog> {
                 const Text("Borrowed (-)", style: TextStyle(color: Colors.grey, fontSize: 13)),
               ],
             ),
-            if (_errorMessage != null) ...[
-              const SizedBox(height: 10),
-              Text(
-                _errorMessage!,
-                style: const TextStyle(
-                  color: Color(0xFFD71921),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
           ],
         ),
       ),
@@ -121,21 +141,34 @@ class _AddFriendDialogState extends State<AddFriendDialog> {
           onPressed: () {
             final name = _nameController.text.trim();
             final amtStr = _amountController.text.trim();
-            final amt = double.tryParse(amtStr);
+            final reason = _reasonController.text.trim();
 
             if (name.isEmpty) {
-              setState(() => _errorMessage = "Please enter a name.");
+              setState(() => _nameError = "Please enter a name.");
               return;
             }
-            if (amt == null || amt <= 0) {
-              setState(() => _errorMessage = "Please enter a valid amount greater than 0.");
+
+            if (widget.existingNames.any(
+              (existing) => existing.toLowerCase() == name.toLowerCase(),
+            )) {
+              setState(() => _nameError = "$name already exists.");
               return;
+            }
+
+            if (amtStr.isNotEmpty || reason.isNotEmpty) {
+              final amt = double.tryParse(amtStr);
+              if (amt == null || amt <= 0) {
+                setState(
+                  () => _amountError = "Please enter a valid amount greater than 0.",
+                );
+                return;
+              }
             }
 
             widget.onAdd(
               name,
               amtStr,
-              _reasonController.text.trim(),
+              reason,
               _isGiving,
             );
           },

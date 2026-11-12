@@ -87,16 +87,19 @@ class _LedgerHomeState extends State<LedgerHome> {
   }
 
   void _handleAddNewFriend(String name, String amountStr, String reason, bool isNegative) {
-    if (name.isEmpty || amountStr.isEmpty) return;
+    if (name.isEmpty) return;
 
     if (_friends.any((f) => f.name.toLowerCase() == name.toLowerCase())) {
-      _showError("Error: $name already exists!");
       return;
     }
 
-    double amount = double.tryParse(amountStr) ?? 0.0;
-    if (isNegative) {
-      amount = -amount;
+    final bool hasInitialTx = amountStr.isNotEmpty || reason.isNotEmpty;
+    double amount = 0.0;
+    if (hasInitialTx) {
+      amount = double.tryParse(amountStr) ?? 0.0;
+      if (isNegative) {
+        amount = -amount;
+      }
     }
 
     final newFriend = Friend(
@@ -104,7 +107,7 @@ class _LedgerHomeState extends State<LedgerHome> {
       name: name,
       emoji: name.isNotEmpty ? name[0].toUpperCase() : '👤',
       initialTransaction: amount,
-      initialReason: reason.isEmpty ? "Initial" : reason,
+      initialReason: hasInitialTx ? (reason.isEmpty ? "Initial" : reason) : '',
     );
 
     setState(() {
@@ -112,6 +115,7 @@ class _LedgerHomeState extends State<LedgerHome> {
     });
     _saveToDisk();
     Navigator.of(context).pop();
+    _handleFriendClick(newFriend);
   }
 
   void _handleSettingsClick() async {
@@ -159,13 +163,10 @@ class _LedgerHomeState extends State<LedgerHome> {
       context: context,
       builder: (context) => AddFriendDialog(
         isDark: widget.isDark,
+        existingNames: _friends.map((f) => f.name).toList(),
         onAdd: _handleAddNewFriend,
       ),
     );
-  }
-
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red));
   }
 
   Widget _renderFriendRow(Friend friend) {
