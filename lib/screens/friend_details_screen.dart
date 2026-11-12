@@ -28,8 +28,11 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
 
   late TabController _tabController;
 
-  // Calculator state
-  String _calcExpression = '';
+  // Calculator state (immediate running-total model)
+  double _accumulatedTotal = 0.0;
+  bool _hasAccumulated = false;
+  String _pendingOperator = '+';
+  String _currentInput = '';
 
   @override
   void initState() {
@@ -49,85 +52,26 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
   }
 
   // --- CALCULATOR LOGIC ---
-  double? _evaluateExpression(String expr) {
-    String sanitized = expr
-        .replaceAll(' ', '')
-        .replaceAll('×', '*')
-        .replaceAll('÷', '/');
-
-    while (sanitized.isNotEmpty &&
-        '+-*/.'.contains(sanitized[sanitized.length - 1])) {
-      sanitized = sanitized.substring(0, sanitized.length - 1);
+  double get _liveTotal {
+    final inputVal = double.tryParse(_currentInput);
+    if (!_hasAccumulated) {
+      return inputVal ?? 0.0;
     }
-
-    if (sanitized.isEmpty) return null;
-
-    final List<String> tokens = [];
-    final buffer = StringBuffer();
-
-    for (int i = 0; i < sanitized.length; i++) {
-      final ch = sanitized[i];
-      if ('+-*/'.contains(ch)) {
-        if (i == 0 && (ch == '-' || ch == '+')) {
-          buffer.write(ch);
-        } else if (buffer.isEmpty && (ch == '-' || ch == '+')) {
-          buffer.write(ch);
-        } else {
-          if (buffer.isNotEmpty) {
-            tokens.add(buffer.toString());
-            buffer.clear();
-          }
-          tokens.add(ch);
-        }
-      } else {
-        buffer.write(ch);
-      }
+    if (inputVal == null) {
+      return _accumulatedTotal;
     }
-    if (buffer.isNotEmpty) {
-      tokens.add(buffer.toString());
+    switch (_pendingOperator) {
+      case '+':
+        return _accumulatedTotal + inputVal;
+      case '-':
+        return _accumulatedTotal - inputVal;
+      case '×':
+        return _accumulatedTotal * inputVal;
+      case '÷':
+        return inputVal == 0 ? _accumulatedTotal : _accumulatedTotal / inputVal;
+      default:
+        return _accumulatedTotal;
     }
-
-    if (tokens.isEmpty) return null;
-
-    // First pass: * and /
-    final List<String> pass1 = [];
-    int i = 0;
-    while (i < tokens.length) {
-      final token = tokens[i];
-      if ((token == '*' || token == '/') &&
-          pass1.isNotEmpty &&
-          i + 1 < tokens.length) {
-        final left = double.tryParse(pass1.removeLast());
-        final right = double.tryParse(tokens[i + 1]);
-        if (left == null || right == null) return null;
-        if (token == '/' && right == 0) return null;
-        final res = token == '*' ? left * right : left / right;
-        pass1.add(res.toString());
-        i += 2;
-      } else {
-        pass1.add(token);
-        i++;
-      }
-    }
-
-    // Second pass: + and -
-    double? total = double.tryParse(pass1.first);
-    if (total == null) return null;
-
-    int j = 1;
-    while (j + 1 < pass1.length) {
-      final op = pass1[j];
-      final val = double.tryParse(pass1[j + 1]);
-      if (val == null) return null;
-      if (op == '+') {
-        total = total! + val;
-      } else if (op == '-') {
-        total = total! - val;
-      }
-      j += 2;
-    }
-
-    return total;
   }
 
   String _formatCalcNumber(double val) {
@@ -137,68 +81,83 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
     return val.toStringAsFixed(2);
   }
 
+  void _resetCalculator() {
+    _accumulatedTotal = 0.0;
+    _hasAccumulated = false;
+    _pendingOperator = '+';
+    _currentInput = '';
+  }
+
   void _onCalcKeyPress(String key) {
     setState(() {
       if (key == 'C') {
-        _calcExpression = '';
+        _resetCalculator();
         return;
       }
       if (key == '⌫') {
-        if (_calcExpression.isNotEmpty) {
-          _calcExpression =
-              _calcExpression.substring(0, _calcExpression.length - 1);
+        if (_currentInput.isNotEmpty) {
+          _currentInput =
+              _currentInput.substring(0, _currentInput.length - 1);
         }
         return;
       }
-      if (key == '=') {
-        final result = _evaluateExpression(_calcExpression);
-        if (result != null) {
-          _calcExpression = _formatCalcNumber(result);
+      if (key == '+/-') {
+        if (_currentInput.isNotEmpty && _currentInput != '0') {
+          if (_currentInput.startsWith('-')) {
+            _currentInput = _currentInput.substring(1);
+          } else {
+            _currentInput = '-$_currentInput';
+          }
+        } else if (_hasAccumulated) {
+          _accumulatedTotal = -_accumulatedTotal;
         }
         return;
       }
 
       const operators = ['+', '-', '×', '÷'];
       if (operators.contains(key)) {
-        if (_calcExpression.isEmpty) {
+        if (!_hasAccumulated && _currentInput.isEmpty) {
           if (key == '-') {
-            _calcExpression = '-';
+            _currentInput = '-';
           }
           return;
         }
-        final lastChar = _calcExpression[_calcExpression.length - 1];
-        if (operators.contains(lastChar)) {
-          _calcExpression =
-              _calcExpression.substring(0, _calcExpression.length - 1) + key;
+        if (_currentInput.isNotEmpty && _currentInput != '-') {
+          _accumulatedTotal = _liveTotal;
+          _hasAccumulated = true;
+          _currentInput = '';
+          _pendingOperator = key;
           return;
         }
-        if (lastChar == '.') {
+        if (_hasAccumulated && _currentInput.isEmpty) {
+          _pendingOperator = key;
           return;
         }
-        _calcExpression += key;
         return;
       }
 
       if (key == '.') {
-        // Prevent multiple decimals in the current number segment
-        final parts = _calcExpression.split(RegExp(r'[+\-×÷]'));
-        final currentSegment = parts.isNotEmpty ? parts.last : '';
-        if (currentSegment.contains('.')) return;
-        if (currentSegment.isEmpty) {
-          _calcExpression += '0.';
+        if (_currentInput.contains('.')) return;
+        if (_currentInput.isEmpty || _currentInput == '-') {
+          _currentInput += '0.';
         } else {
-          _calcExpression += '.';
+          _currentInput += '.';
         }
         return;
       }
 
-      _calcExpression += key;
+      // Digit 0-9
+      if (_currentInput == '0') {
+        _currentInput = key;
+      } else {
+        _currentInput += key;
+      }
     });
   }
 
   void _validateCalculatorAmount() {
-    final result = _evaluateExpression(_calcExpression);
-    if (result == null || result == 0) {
+    final result = _liveTotal;
+    if (result == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Calculate a non-zero amount first."),
@@ -359,7 +318,7 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
                       ),
                     );
                     if (clearCalculatorOnSave) {
-                      _calcExpression = '';
+                      _resetCalculator();
                     }
                   });
 
@@ -661,16 +620,17 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
     String label, {
     Color? textColor,
     Color? bgColor,
+    double fontSize = 28,
     int flex = 1,
   }) {
     final defaultBg =
-        widget.isDark ? const Color(0xFF1A1A1A) : Colors.grey[200]!;
+        widget.isDark ? const Color(0xFF171717) : Colors.grey[200]!;
     final defaultText = widget.isDark ? Colors.white : Colors.black87;
 
     return Expanded(
       flex: flex,
       child: Padding(
-        padding: const EdgeInsets.all(4.0),
+        padding: const EdgeInsets.all(6.0),
         child: SizedBox.expand(
           child: ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -679,16 +639,15 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
               elevation: 0,
               padding: EdgeInsets.zero,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(40),
               ),
             ),
             onPressed: () => _onCalcKeyPress(label),
             child: Text(
               label,
               style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                fontFamily: 'Courier',
+                fontSize: fontSize,
+                fontWeight: FontWeight.w500,
                 color: textColor ?? defaultText,
               ),
             ),
@@ -698,173 +657,169 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
     );
   }
 
-  Widget _buildCalculatorTab(Color? headerColor, Color? headerTextColor) {
-    final liveResult = _evaluateExpression(_calcExpression);
-    final resultText =
-        liveResult != null ? "${liveResult.toStringAsFixed(2)} MAD" : "0.00 MAD";
+  Widget _buildCalculatorTab() {
+    final liveResult = _liveTotal;
+    final totalText = "${liveResult.toStringAsFixed(2)} MAD";
+    final currentStepText = !_hasAccumulated
+        ? (_currentInput.isEmpty ? "0" : _currentInput)
+        : "$_pendingOperator ${_currentInput.isEmpty ? '' : _currentInput}";
 
     const accentRed = Color(0xFFD71921);
-    final opBg = widget.isDark ? const Color(0xFF262626) : Colors.grey[300]!;
+    const opGreen = Color(0xFF4CAF50);
+    final opBg = widget.isDark ? const Color(0xFF1F1F1F) : Colors.grey[300]!;
 
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          color: headerColor,
-          width: double.infinity,
-          child: Text(
-            "AMOUNT CALCULATOR",
-            style: TextStyle(
-              color: headerTextColor,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 2,
-              fontSize: 12,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Column(
-              children: [
-                // Display Screen
-                Container(
-                  width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: widget.isDark
-                        ? const Color(0xFF121212)
-                        : Colors.grey[100],
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: widget.isDark ? Colors.white12 : Colors.black12,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      child: Column(
+        children: [
+          // Samsung-style open top display area: Running Total + Current Step
+          Expanded(
+            flex: 3,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    reverse: true,
+                    child: Text(
+                      totalText,
+                      style: TextStyle(
+                        fontSize: 40,
+                        fontWeight: FontWeight.w600,
+                        color: liveResult < 0
+                            ? accentRed
+                            : (widget.isDark ? Colors.white : Colors.black),
+                      ),
                     ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                  const SizedBox(height: 8),
+                  Text(
+                    currentStepText,
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w500,
+                      color: opGreen,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Divider(
+            color: widget.isDark ? Colors.white12 : Colors.black12,
+            height: 20,
+            thickness: 1,
+          ),
+          // 5-Row Samsung-proportioned Keypad (no '=' button; Validate '✓' at bottom-right)
+          Expanded(
+            flex: 7,
+            child: Column(
+              children: [
+                Expanded(
+                  child: Row(
                     children: [
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        reverse: true,
-                        child: Text(
-                          _calcExpression.isEmpty ? "0" : _calcExpression,
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontFamily: 'Courier',
-                            color:
-                                widget.isDark ? Colors.white70 : Colors.black54,
-                          ),
-                        ),
+                      _buildCalcButton(
+                        'C',
+                        textColor: accentRed,
+                        bgColor: opBg,
+                        fontSize: 26,
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        "= $resultText",
-                        style: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.bold,
-                          fontFamily: 'Courier',
-                          color: liveResult != null && liveResult < 0
-                              ? accentRed
-                              : Colors.green,
-                        ),
+                      _buildCalcButton(
+                        '+/-',
+                        textColor: opGreen,
+                        bgColor: opBg,
+                        fontSize: 24,
+                      ),
+                      _buildCalcButton(
+                        '⌫',
+                        textColor: opGreen,
+                        bgColor: opBg,
+                        fontSize: 26,
+                      ),
+                      _buildCalcButton(
+                        '÷',
+                        textColor: opGreen,
+                        bgColor: opBg,
+                        fontSize: 34,
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 8),
-                // Keypad (flexes to fit screen without scrolling)
                 Expanded(
-                  child: Column(
+                  child: Row(
                     children: [
-                      Expanded(
-                        child: Row(
-                          children: [
-                            _buildCalcButton('C', textColor: accentRed, bgColor: opBg),
-                            _buildCalcButton('⌫', bgColor: opBg),
-                            _buildCalcButton('÷', textColor: accentRed, bgColor: opBg),
-                            _buildCalcButton('×', textColor: accentRed, bgColor: opBg),
-                          ],
-                        ),
+                      _buildCalcButton('7'),
+                      _buildCalcButton('8'),
+                      _buildCalcButton('9'),
+                      _buildCalcButton(
+                        '×',
+                        textColor: opGreen,
+                        bgColor: opBg,
+                        fontSize: 32,
                       ),
-                      Expanded(
-                        child: Row(
-                          children: [
-                            _buildCalcButton('7'),
-                            _buildCalcButton('8'),
-                            _buildCalcButton('9'),
-                            _buildCalcButton('-', textColor: accentRed, bgColor: opBg),
-                          ],
-                        ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Row(
+                    children: [
+                      _buildCalcButton('4'),
+                      _buildCalcButton('5'),
+                      _buildCalcButton('6'),
+                      _buildCalcButton(
+                        '-',
+                        textColor: opGreen,
+                        bgColor: opBg,
+                        fontSize: 36,
                       ),
-                      Expanded(
-                        child: Row(
-                          children: [
-                            _buildCalcButton('4'),
-                            _buildCalcButton('5'),
-                            _buildCalcButton('6'),
-                            _buildCalcButton('+', textColor: accentRed, bgColor: opBg),
-                          ],
-                        ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Row(
+                    children: [
+                      _buildCalcButton('1'),
+                      _buildCalcButton('2'),
+                      _buildCalcButton('3'),
+                      _buildCalcButton(
+                        '+',
+                        textColor: opGreen,
+                        bgColor: opBg,
+                        fontSize: 32,
                       ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Row(
+                    children: [
+                      _buildCalcButton('0', flex: 2),
+                      _buildCalcButton('.', fontSize: 32),
                       Expanded(
-                        child: Row(
-                          children: [
-                            _buildCalcButton('1'),
-                            _buildCalcButton('2'),
-                            _buildCalcButton('3'),
-                            _buildCalcButton('=', textColor: Colors.white, bgColor: Colors.green),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: Row(
-                          children: [
-                            _buildCalcButton('0', flex: 2),
-                            _buildCalcButton('.'),
-                            Expanded(
-                              flex: 1,
-                              child: Padding(
-                                padding: const EdgeInsets.all(4.0),
-                                child: SizedBox.expand(
-                                  child: ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: accentRed,
-                                      foregroundColor: Colors.white,
-                                      elevation: 0,
-                                      padding: EdgeInsets.zero,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                    ),
-                                    onPressed: _validateCalculatorAmount,
-                                    child: const Icon(Icons.check, size: 24, color: Colors.white),
-                                  ),
+                        flex: 1,
+                        child: Padding(
+                          padding: const EdgeInsets.all(6.0),
+                          child: SizedBox.expand(
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: accentRed,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                padding: EdgeInsets.zero,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(40),
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 46,
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: accentRed,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          onPressed: _validateCalculatorAmount,
-                          icon: const Icon(Icons.add_card, color: Colors.white),
-                          label: const Text(
-                            "USE AMOUNT & ADD TRANSACTION",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1,
+                              onPressed: _validateCalculatorAmount,
+                              child: const Icon(
+                                Icons.check,
+                                size: 32,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ),
@@ -875,8 +830,8 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
               ],
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -1035,7 +990,7 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
           ),
 
           // --- TAB 2: CALCULATOR ---
-          _buildCalculatorTab(headerColor, headerTextColor),
+          _buildCalculatorTab(),
         ],
       ),
       floatingActionButton: _tabController.index == 0
