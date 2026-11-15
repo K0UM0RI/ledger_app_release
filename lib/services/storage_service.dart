@@ -171,30 +171,56 @@ class SettingsStorage {
     return File('$path/settings.json');
   }
 
-  // LOAD: Returns true if Dark Mode was on, false otherwise
-  Future<bool> readDarkMode() async {
+  Future<Map<String, dynamic>> _readSettingsMap() async {
     try {
       final file = await _localFile;
-      if (!await file.exists()) return false;
+      if (!await file.exists()) return {};
 
       final contents = await file.readAsString();
-      final Map<String, dynamic> json = jsonDecode(contents);
-
-      return json['isDark'] ?? false;
+      final decoded = jsonDecode(contents);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      return {};
     } catch (e) {
-      await _appendErrorLog('SettingsStorage.readDarkMode', e);
-      return false;
+      await _appendErrorLog('SettingsStorage._readSettingsMap', e);
+      return {};
     }
+  }
+
+  // LOAD: Returns true if Dark Mode was on, false otherwise
+  Future<bool> readDarkMode() async {
+    final map = await _readSettingsMap();
+    return (map['isDark'] as bool?) ?? false;
   }
 
   // SAVE: Writes the boolean to disk
   Future<void> writeDarkMode(bool isDark) async {
     try {
+      final map = await _readSettingsMap();
+      map['isDark'] = isDark;
       final file = await _localFile;
-      String jsonString = jsonEncode({'isDark': isDark});
-      await file.writeAsString(jsonString);
+      await file.writeAsString(jsonEncode(map));
     } catch (e) {
       await _appendErrorLog('SettingsStorage.writeDarkMode', e);
+    }
+  }
+
+  // LOAD: Returns true if auto-archive for 0 balance friends is on (defaults to true)
+  Future<bool> readAutoArchiveZeroBalance() async {
+    final map = await _readSettingsMap();
+    return (map['autoArchiveZeroBalance'] as bool?) ?? true;
+  }
+
+  // SAVE: Writes the auto-archive setting to disk
+  Future<void> writeAutoArchiveZeroBalance(bool autoArchive) async {
+    try {
+      final map = await _readSettingsMap();
+      map['autoArchiveZeroBalance'] = autoArchive;
+      final file = await _localFile;
+      await file.writeAsString(jsonEncode(map));
+    } catch (e) {
+      await _appendErrorLog('SettingsStorage.writeAutoArchiveZeroBalance', e);
     }
   }
 }

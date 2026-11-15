@@ -8,31 +8,51 @@ import '../models/friend.dart';
 import '../services/storage_service.dart';
 import '../services/update_service.dart';
 
-class SettingsPage extends StatelessWidget {
+class SettingsPage extends StatefulWidget {
   final FriendStorage storage;
   final bool isDark;
   final Function(bool) onThemeChanged;
+  final bool autoArchiveZeroBalance;
+  final Function(bool)? onAutoArchiveChanged;
 
   const SettingsPage({
     super.key,
     required this.storage,
     required this.isDark,
     required this.onThemeChanged,
+    this.autoArchiveZeroBalance = true,
+    this.onAutoArchiveChanged,
   });
+
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  late bool _isDark;
+  late bool _autoArchiveZeroBalance;
+  final SettingsStorage _settingsStorage = SettingsStorage();
+
+  @override
+  void initState() {
+    super.initState();
+    _isDark = widget.isDark;
+    _autoArchiveZeroBalance = widget.autoArchiveZeroBalance;
+  }
 
   void _checkForUpdates(BuildContext context) async {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (dialogCtx) => AlertDialog(
-        backgroundColor: isDark ? const Color(0xFF111111) : Colors.white,
+        backgroundColor: _isDark ? const Color(0xFF111111) : Colors.white,
         content: Row(
           children: [
             const CircularProgressIndicator(color: Color(0xFFD71921)),
             const SizedBox(width: 20),
             Text(
               "Checking for updates...",
-              style: TextStyle(color: isDark ? Colors.white : Colors.black),
+              style: TextStyle(color: _isDark ? Colors.white : Colors.black),
             ),
           ],
         ),
@@ -48,20 +68,20 @@ class SettingsPage extends StatelessWidget {
         showDialog(
           context: context,
           builder: (dialogCtx) => AlertDialog(
-            backgroundColor: isDark ? const Color(0xFF111111) : Colors.white,
+            backgroundColor: _isDark ? const Color(0xFF111111) : Colors.white,
             title: Row(
               children: [
                 const Icon(Icons.check_circle_outline, color: Colors.green),
                 const SizedBox(width: 10),
                 Text(
                   "UP TO DATE",
-                  style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 16),
+                  style: TextStyle(color: _isDark ? Colors.white : Colors.black, fontSize: 16),
                 ),
               ],
             ),
             content: Text(
               "You are on the latest version (v${updateInfo.currentVersion}).",
-              style: TextStyle(color: isDark ? Colors.grey : Colors.black87),
+              style: TextStyle(color: _isDark ? Colors.grey : Colors.black87),
             ),
             actions: [
               TextButton(
@@ -75,14 +95,14 @@ class SettingsPage extends StatelessWidget {
         showDialog(
           context: context,
           builder: (dialogCtx) => AlertDialog(
-            backgroundColor: isDark ? const Color(0xFF111111) : Colors.white,
+            backgroundColor: _isDark ? const Color(0xFF111111) : Colors.white,
             title: Row(
               children: [
                 const Icon(Icons.system_update_alt, color: Color(0xFFD71921)),
                 const SizedBox(width: 10),
                 Text(
                   "UPDATE AVAILABLE",
-                  style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 16),
+                  style: TextStyle(color: _isDark ? Colors.white : Colors.black, fontSize: 16),
                 ),
               ],
             ),
@@ -94,7 +114,7 @@ class SettingsPage extends StatelessWidget {
                   "Version ${updateInfo.latestVersion} is available (Current: ${updateInfo.currentVersion}).",
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : Colors.black,
+                    color: _isDark ? Colors.white : Colors.black,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -105,7 +125,7 @@ class SettingsPage extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   updateInfo.releaseNotes,
-                  style: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
+                  style: TextStyle(color: _isDark ? Colors.white70 : Colors.black87),
                 ),
               ],
             ),
@@ -156,7 +176,7 @@ class SettingsPage extends StatelessWidget {
         return _OtaDownloadDialog(
           downloadUrl: updateInfo.downloadUrl,
           version: updateInfo.latestVersion,
-          isDark: isDark,
+          isDark: _isDark,
         );
       },
     );
@@ -183,11 +203,43 @@ class SettingsPage extends StatelessWidget {
           SwitchListTile(
             title: const Text("Nothing Dark Mode"),
             subtitle: const Text("Monochrome with Red Accents"),
-            secondary: Icon(Icons.dark_mode, color: isDark ? Colors.white : Colors.black),
+            secondary: Icon(Icons.dark_mode, color: _isDark ? Colors.white : Colors.black),
             activeThumbColor: const Color(0xFFD71921),
-            value: isDark,
+            value: _isDark,
             onChanged: (bool value) {
-              onThemeChanged(value);
+              setState(() {
+                _isDark = value;
+              });
+              widget.onThemeChanged(value);
+            },
+          ),
+
+          const Divider(),
+
+          // --- ARCHIVE SECTION ---
+          const ListTile(
+            title: Text(
+              "ARCHIVE",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.grey,
+                fontSize: 12,
+                letterSpacing: 2,
+              ),
+            ),
+          ),
+          SwitchListTile(
+            title: const Text("Auto-Archive 0 Balance"),
+            subtitle: const Text("Automatically archive friends with 0.00 MAD balance"),
+            secondary: Icon(Icons.archive_outlined, color: _isDark ? Colors.white : Colors.black),
+            activeThumbColor: const Color(0xFFD71921),
+            value: _autoArchiveZeroBalance,
+            onChanged: (bool value) {
+              setState(() {
+                _autoArchiveZeroBalance = value;
+              });
+              _settingsStorage.writeAutoArchiveZeroBalance(value);
+              widget.onAutoArchiveChanged?.call(value);
             },
           ),
 
@@ -207,7 +259,7 @@ class SettingsPage extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.info_outline, color: Color(0xFFD71921)),
             title: const Text("Made by"),
-            subtitle: Text("koumori@bat", style: TextStyle(color: isDark ? Colors.grey : Colors.black87)),
+            subtitle: Text("koumori@bat", style: TextStyle(color: _isDark ? Colors.grey : Colors.black87)),
           ),
 
           const Divider(),
@@ -224,24 +276,24 @@ class SettingsPage extends StatelessWidget {
             ),
           ),
           ListTile(
-            leading: Icon(Icons.ios_share, color: isDark ? Colors.white : Colors.black),
+            leading: Icon(Icons.ios_share, color: _isDark ? Colors.white : Colors.black),
             title: const Text("Export Data"),
-            subtitle: Text("Open copyable text", style: TextStyle(color: isDark ? Colors.grey : Colors.black54)),
+            subtitle: Text("Open copyable text", style: TextStyle(color: _isDark ? Colors.grey : Colors.black54)),
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => ExportDataPage(storage: storage, isDark: isDark)),
+                MaterialPageRoute(builder: (context) => ExportDataPage(storage: widget.storage, isDark: _isDark)),
               );
             },
           ),
           ListTile(
-            leading: Icon(Icons.download_for_offline, color: isDark ? Colors.white : Colors.black),
+            leading: Icon(Icons.download_for_offline, color: _isDark ? Colors.white : Colors.black),
             title: const Text("Import Data"),
-            subtitle: Text("Paste backup text to restore data", style: TextStyle(color: isDark ? Colors.grey : Colors.black54)),
+            subtitle: Text("Paste backup text to restore data", style: TextStyle(color: _isDark ? Colors.grey : Colors.black54)),
             onTap: () async {
               final bool? imported = await Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => ImportDataPage(storage: storage, isDark: isDark)),
+                MaterialPageRoute(builder: (context) => ImportDataPage(storage: widget.storage, isDark: _isDark)),
               );
               if (imported == true && context.mounted) {
                 Navigator.pop(context, true);
@@ -255,9 +307,9 @@ class SettingsPage extends StatelessWidget {
               showDialog(
                 context: context,
                 builder: (dialogCtx) => AlertDialog(
-                  backgroundColor: isDark ? const Color(0xFF111111) : Colors.white,
-                  title: Text("ARE YOU SURE?", style: TextStyle(color: isDark ? Colors.white : Colors.black)),
-                  content: Text("This will wipe all data.", style: TextStyle(color: isDark ? Colors.grey : Colors.black)),
+                  backgroundColor: _isDark ? const Color(0xFF111111) : Colors.white,
+                  title: Text("ARE YOU SURE?", style: TextStyle(color: _isDark ? Colors.white : Colors.black)),
+                  content: Text("This will wipe all data.", style: TextStyle(color: _isDark ? Colors.grey : Colors.black)),
                   actions: [
                     TextButton(
                       child: const Text("CANCEL", style: TextStyle(color: Colors.grey)),
@@ -267,7 +319,7 @@ class SettingsPage extends StatelessWidget {
                       style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD71921)),
                       child: const Text("WIPE", style: TextStyle(color: Colors.white)),
                       onPressed: () {
-                        storage.writeToFile([]);
+                        widget.storage.writeToFile([]);
                         Navigator.pop(dialogCtx);
                         Navigator.pop(context, true);
                       },
@@ -297,16 +349,16 @@ class SettingsPage extends StatelessWidget {
               final version = snapshot.data?.version ?? '-';
               final build = snapshot.data?.buildNumber ?? '-';
               return ListTile(
-                leading: Icon(Icons.verified, color: isDark ? Colors.white : Colors.black),
+                leading: Icon(Icons.verified, color: _isDark ? Colors.white : Colors.black),
                 title: const Text("Version"),
-                subtitle: Text('$version ($build)', style: TextStyle(color: isDark ? Colors.grey : Colors.black87)),
+                subtitle: Text('$version ($build)', style: TextStyle(color: _isDark ? Colors.grey : Colors.black87)),
               );
             },
           ),
           ListTile(
-            leading: Icon(Icons.system_update_alt, color: isDark ? Colors.white : Colors.black),
+            leading: Icon(Icons.system_update_alt, color: _isDark ? Colors.white : Colors.black),
             title: const Text("Check for Updates"),
-            subtitle: Text("Fetch latest release from GitHub", style: TextStyle(color: isDark ? Colors.grey : Colors.black54)),
+            subtitle: Text("Fetch latest release from GitHub", style: TextStyle(color: _isDark ? Colors.grey : Colors.black54)),
             onTap: () => _checkForUpdates(context),
           ),
         ],

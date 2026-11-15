@@ -6,6 +6,10 @@ class Friend {
   String emoji; // Profile picture emoji
   double amountOwed;
   final List<Transaction> transactions;
+  bool isArchived;
+  bool isManuallyUnarchived;
+
+  bool get hasZeroBalance => amountOwed.abs() < 0.005;
 
   // Private constructor - used by factory methods
   Friend._({
@@ -14,6 +18,8 @@ class Friend {
     required this.emoji,
     required this.amountOwed,
     required this.transactions,
+    this.isArchived = false,
+    this.isManuallyUnarchived = false,
   });
 
   // Factory for creating a new friend with optional initial transaction
@@ -23,6 +29,8 @@ class Friend {
     String? emoji,
     double initialTransaction = 0.0,
     String initialReason = '',
+    bool isArchived = false,
+    bool isManuallyUnarchived = false,
   }) {
     final hasInitialTransaction =
         initialTransaction != 0.0 || initialReason.isNotEmpty;
@@ -31,6 +39,8 @@ class Friend {
       name: name,
       emoji: emoji ?? (name.isNotEmpty ? name[0].toUpperCase() : '👤'),
       amountOwed: initialTransaction,
+      isArchived: isArchived,
+      isManuallyUnarchived: isManuallyUnarchived,
       transactions: hasInitialTransaction
           ? [
               Transaction(
@@ -53,6 +63,9 @@ class Friend {
     final String parsedName = (json['name'] as String?) ?? 'Unknown';
     final String parsedId =
         (json['id'] as String?) ?? DateTime.now().toIso8601String();
+    final bool parsedIsArchived = (json['isArchived'] as bool?) ?? false;
+    final bool parsedIsManuallyUnarchived =
+        (json['isManuallyUnarchived'] as bool?) ?? false;
 
     return Friend._(
       id: parsedId,
@@ -61,12 +74,18 @@ class Friend {
           (parsedName.isNotEmpty ? parsedName[0].toUpperCase() : '👤'),
       amountOwed: parsedAmountOwed.toDouble(),
       transactions: txList,
+      isArchived: parsedIsArchived,
+      isManuallyUnarchived: parsedIsManuallyUnarchived,
     );
   }
 
   void addTransaction(Transaction transaction) {
     transactions.add(transaction);
     amountOwed += transaction.amount;
+    if (hasZeroBalance) {
+      amountOwed = 0.0;
+    }
+    isManuallyUnarchived = false;
   }
 
   void correctTransaction(
@@ -82,6 +101,10 @@ class Friend {
       note: note,
     );
     amountOwed += diff;
+    if (hasZeroBalance) {
+      amountOwed = 0.0;
+    }
+    isManuallyUnarchived = false;
   }
 
   Map<String, dynamic> toJson() => {
@@ -89,6 +112,8 @@ class Friend {
     'name': name,
     'emoji': emoji,
     'amountOwed': amountOwed,
+    'isArchived': isArchived,
+    'isManuallyUnarchived': isManuallyUnarchived,
     'transactions': transactions.map((t) => t.toJson()).toList(),
   };
 }
