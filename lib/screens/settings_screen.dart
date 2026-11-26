@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:ota_update/ota_update.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../models/friend.dart';
 import '../services/storage_service.dart';
@@ -117,6 +116,45 @@ class _SettingsPageState extends State<SettingsPage> {
                     color: _isDark ? Colors.white : Colors.black,
                   ),
                 ),
+                if (updateInfo.hasDeltaPatch || updateInfo.fullApkSizeBytes != null) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: updateInfo.hasDeltaPatch
+                          ? Colors.green.withValues(alpha: 0.14)
+                          : (_isDark ? Colors.white10 : Colors.black12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          updateInfo.hasDeltaPatch ? Icons.bolt : Icons.download_outlined,
+                          size: 15,
+                          color: updateInfo.hasDeltaPatch ? Colors.green : Colors.grey,
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            updateInfo.hasDeltaPatch
+                                ? "Delta patch: ${UpdateInfo.formatBytes(updateInfo.deltaPatchSizeBytes ?? 0)}"
+                                    "${updateInfo.savedBytes != null ? ' (saves ${UpdateInfo.formatBytes(updateInfo.savedBytes!)})' : ''}"
+                                : "Split APK${updateInfo.selectedAbi.isNotEmpty ? ' (${updateInfo.selectedAbi})' : ''}: "
+                                    "${UpdateInfo.formatBytes(updateInfo.fullApkSizeBytes!)}",
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: updateInfo.hasDeltaPatch
+                                  ? Colors.green
+                                  : (_isDark ? Colors.white70 : Colors.black87),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 const Text(
                   "Release Notes:",
@@ -159,7 +197,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   void _startOtaUpdate(BuildContext context, UpdateInfo updateInfo) {
-    if (updateInfo.downloadUrl.isEmpty) {
+    if (updateInfo.downloadUrl.isEmpty && !updateInfo.hasDeltaPatch) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("No download URL found for this update."),
@@ -174,8 +212,7 @@ class _SettingsPageState extends State<SettingsPage> {
       barrierDismissible: false,
       builder: (dialogCtx) {
         return _OtaDownloadDialog(
-          downloadUrl: updateInfo.downloadUrl,
-          version: updateInfo.latestVersion,
+          updateInfo: updateInfo,
           isDark: _isDark,
         );
       },
@@ -737,13 +774,11 @@ class _ImportDataPageState extends State<ImportDataPage> {
 }
 
 class _OtaDownloadDialog extends StatefulWidget {
-  final String downloadUrl;
-  final String version;
+  final UpdateInfo updateInfo;
   final bool isDark;
 
   const _OtaDownloadDialog({
-    required this.downloadUrl,
-    required this.version,
+    required this.updateInfo,
     required this.isDark,
   });
 
@@ -752,10 +787,11 @@ class _OtaDownloadDialog extends StatefulWidget {
 }
 
 class _OtaDownloadDialogState extends State<_OtaDownloadDialog> {
-  StreamSubscription<OtaEvent>? _subscription;
-  String _statusText = "Starting download...";
-  double _progress = 0.0;
+  StreamSubscription<UpdateProgress>? _subscription;
+  String _statusText = "Starting update...";
+  double _progress = -1.0;
   bool _hasError = false;
+  bool _canClose = false;
   String _errorMessage = "";
 
   @override
@@ -773,46 +809,23 @@ class _OtaDownloadDialogState extends State<_OtaDownloadDialog> {
   void _startDownload() {
     try {
       _subscription = UpdateService()
-          .startDownloadAndInstall(widget.downloadUrl)
+          .startSmartUpdate(widget.updateInfo)
           .listen(
         (event) {
           if (!mounted) return;
           setState(() {
-            switch (event.status) {
-              case OtaStatus.DOWNLOADING:
-                final parsed = double.tryParse(event.value ?? '0') ?? 0;
-                _progress = parsed / 100.0;
-                _statusText = "Downloading update: ${parsed.toInt()}%";
-                break;
-              case OtaStatus.INSTALLING:
-                _progress = 1.0;
-                _statusText = "Launching package installer...";
-                break;
-              case OtaStatus.INSTALLATION_DONE:
-                _statusText = "Installation complete!";
-                break;
-              case OtaStatus.ALREADY_RUNNING_ERROR:
-                _hasError = true;
-                _errorMessage = "Update is already running in the background.";
-                break;
-              case OtaStatus.PERMISSION_NOT_GRANTED_ERROR:
-                _hasError = true;
-                _errorMessage = "Permission to install unknown apps was denied.";
-                break;
-              case OtaStatus.DOWNLOAD_ERROR:
-                _hasError = true;
-                _errorMessage = "Failed to download update file. Check connection.";
-                break;
-              case OtaStatus.CHECKSUM_ERROR:
-                _hasError = true;
-                _errorMessage = "Downloaded file checksum verification failed.";
-                break;
-              case OtaStatus.INTERNAL_ERROR:
-                _hasError = true;
-                _errorMessage = event.value ?? "An internal error occurred.";
-                break;
-              default:
-                break;
+            _progress = event.progress;
+            _statusText = event.message;
+            if (event.stage == UpdateStage.error) {
+              _hasError = true;
+              _canClose = true;
+              _errorMessage = event.message;
+            } else if (event.stage == UpdateStage.permissionRequired) {
+              _hasError = true;
+              _canClose = true;
+              _errorMessage = event.message;
+            } else if (event.stage == UpdateStage.installing) {
+              _canClose = true;
             }
           });
         },
@@ -820,6 +833,7 @@ class _OtaDownloadDialogState extends State<_OtaDownloadDialog> {
           if (!mounted) return;
           setState(() {
             _hasError = true;
+            _canClose = true;
             _errorMessage = err.toString();
           });
         },
@@ -827,6 +841,7 @@ class _OtaDownloadDialogState extends State<_OtaDownloadDialog> {
     } catch (e) {
       setState(() {
         _hasError = true;
+        _canClose = true;
         _errorMessage = e.toString();
       });
     }
@@ -834,10 +849,14 @@ class _OtaDownloadDialogState extends State<_OtaDownloadDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final title = _hasError
+        ? "UPDATE ERROR"
+        : (widget.updateInfo.hasDeltaPatch ? "APPLYING DELTA UPDATE" : "DOWNLOADING UPDATE");
+
     return AlertDialog(
       backgroundColor: widget.isDark ? const Color(0xFF111111) : Colors.white,
       title: Text(
-        _hasError ? "UPDATE ERROR" : "DOWNLOADING UPDATE",
+        title,
         style: TextStyle(
           color: _hasError ? const Color(0xFFD71921) : (widget.isDark ? Colors.white : Colors.black),
           fontWeight: FontWeight.bold,
@@ -849,7 +868,7 @@ class _OtaDownloadDialogState extends State<_OtaDownloadDialog> {
         children: [
           if (!_hasError) ...[
             LinearProgressIndicator(
-              value: _progress > 0 ? _progress : null,
+              value: _progress >= 0 ? _progress : null,
               color: const Color(0xFFD71921),
               backgroundColor: widget.isDark ? Colors.white12 : Colors.black12,
             ),
@@ -857,6 +876,7 @@ class _OtaDownloadDialogState extends State<_OtaDownloadDialog> {
             Text(
               _statusText,
               style: TextStyle(color: widget.isDark ? Colors.white70 : Colors.black87),
+              textAlign: TextAlign.center,
             ),
           ] else ...[
             const Icon(Icons.error_outline, color: Color(0xFFD71921), size: 40),
@@ -870,10 +890,10 @@ class _OtaDownloadDialogState extends State<_OtaDownloadDialog> {
         ],
       ),
       actions: [
-        if (_hasError) ...[
+        if (_hasError && widget.updateInfo.downloadUrl.isNotEmpty)
           TextButton(
             onPressed: () {
-              Clipboard.setData(ClipboardData(text: widget.downloadUrl));
+              Clipboard.setData(ClipboardData(text: widget.updateInfo.downloadUrl));
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text("Direct APK download link copied to clipboard!"),
@@ -883,11 +903,11 @@ class _OtaDownloadDialogState extends State<_OtaDownloadDialog> {
             },
             child: const Text("COPY LINK", style: TextStyle(color: Colors.blue)),
           ),
+        if (_canClose)
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text("CLOSE", style: TextStyle(color: Color(0xFFD71921))),
           ),
-        ],
       ],
     );
   }
