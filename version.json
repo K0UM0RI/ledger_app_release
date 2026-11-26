@@ -1,49 +1,49 @@
 {
-    "version":  "1.4.8",
-    "buildNumber":  1012,
-    "downloadUrl":  "https://raw.githubusercontent.com/K0UM0RI/ledger_app_release/main/ledger-v1.4.8-arm64-v8a.apk",
-    "releaseNotes":  "Added split-per-ABI APKs and self-hosted binary delta OTA patching.",
+    "version":  "1.4.9",
+    "buildNumber":  1013,
+    "downloadUrl":  "https://raw.githubusercontent.com/K0UM0RI/ledger_app_release/main/ledger-v1.4.9-arm64-v8a.apk",
+    "releaseNotes":  "Display device ABI next to app version in Settings.",
     "apks":  {
                  "arm64-v8a":  {
-                                   "url":  "https://raw.githubusercontent.com/K0UM0RI/ledger_app_release/main/ledger-v1.4.8-arm64-v8a.apk",
-                                   "sha256":  "5a8e692f3df686713242f99c941e8321b85872404eabccb50e20755dd24d5927",
+                                   "url":  "https://raw.githubusercontent.com/K0UM0RI/ledger_app_release/main/ledger-v1.4.9-arm64-v8a.apk",
+                                   "sha256":  "d5ebcba51cf9608d6429d0c6756b78e085ddf78149376e092414190d6cd82c9e",
                                    "size":  18111199
                                },
                  "armeabi-v7a":  {
-                                     "url":  "https://raw.githubusercontent.com/K0UM0RI/ledger_app_release/main/ledger-v1.4.8-armeabi-v7a.apk",
-                                     "sha256":  "240f92b0c5421cd491699a9c22b098cbf045b6b7889deb3efde021ecf5abb2f4",
+                                     "url":  "https://raw.githubusercontent.com/K0UM0RI/ledger_app_release/main/ledger-v1.4.9-armeabi-v7a.apk",
+                                     "sha256":  "f7b2fe2481778167eb6b938f46a12c2a41c181b5ba1e7fec3ac52df1f1889e61",
                                      "size":  15804171
                                  },
                  "x86_64":  {
-                                "url":  "https://raw.githubusercontent.com/K0UM0RI/ledger_app_release/main/ledger-v1.4.8-x86_64.apk",
-                                "sha256":  "0185500594003b772b3936f5ad29f91ca1368f107849011c183eda07516ad927",
+                                "url":  "https://raw.githubusercontent.com/K0UM0RI/ledger_app_release/main/ledger-v1.4.9-x86_64.apk",
+                                "sha256":  "4da5ea87400aabb7b84142d4a777f0e20198a1a92fbe83b046237bbef1890354",
                                 "size":  19544353
                             }
              },
     "patches":  [
                     {
                         "abi":  "arm64-v8a",
-                        "fromVersion":  "1.4.7",
-                        "baseSha256":  "7fd67ea5cf7934182f960a5c83467c89b0c8744a970a66c538a536728375ebbb",
-                        "targetSha256":  "5a8e692f3df686713242f99c941e8321b85872404eabccb50e20755dd24d5927",
-                        "url":  "https://raw.githubusercontent.com/K0UM0RI/ledger_app_release/main/ledger-patch-v1.4.7-to-v1.4.8-arm64-v8a.ldgpatch",
-                        "size":  2181656
+                        "fromVersion":  "1.4.8",
+                        "baseSha256":  "5a8e692f3df686713242f99c941e8321b85872404eabccb50e20755dd24d5927",
+                        "targetSha256":  "d5ebcba51cf9608d6429d0c6756b78e085ddf78149376e092414190d6cd82c9e",
+                        "url":  "https://raw.githubusercontent.com/K0UM0RI/ledger_app_release/main/ledger-patch-v1.4.8-to-v1.4.9-arm64-v8a.ldgpatch",
+                        "size":  1291744
                     },
                     {
                         "abi":  "armeabi-v7a",
-                        "fromVersion":  "1.4.7",
-                        "baseSha256":  "7fd67ea5cf7934182f960a5c83467c89b0c8744a970a66c538a536728375ebbb",
-                        "targetSha256":  "240f92b0c5421cd491699a9c22b098cbf045b6b7889deb3efde021ecf5abb2f4",
-                        "url":  "https://raw.githubusercontent.com/K0UM0RI/ledger_app_release/main/ledger-patch-v1.4.7-to-v1.4.8-armeabi-v7a.ldgpatch",
-                        "size":  2318785
+                        "fromVersion":  "1.4.8",
+                        "baseSha256":  "240f92b0c5421cd491699a9c22b098cbf045b6b7889deb3efde021ecf5abb2f4",
+                        "targetSha256":  "f7b2fe2481778167eb6b938f46a12c2a41c181b5ba1e7fec3ac52df1f1889e61",
+                        "url":  "https://raw.githubusercontent.com/K0UM0RI/ledger_app_release/main/ledger-patch-v1.4.8-to-v1.4.9-armeabi-v7a.ldgpatch",
+                        "size":  1437642
                     },
                     {
                         "abi":  "x86_64",
-                        "fromVersion":  "1.4.7",
-                        "baseSha256":  "7fd67ea5cf7934182f960a5c83467c89b0c8744a970a66c538a536728375ebbb",
-                        "targetSha256":  "0185500594003b772b3936f5ad29f91ca1368f107849011c183eda07516ad927",
-                        "url":  "https://raw.githubusercontent.com/K0UM0RI/ledger_app_release/main/ledger-patch-v1.4.7-to-v1.4.8-x86_64.ldgpatch",
-                        "size":  2195831
+                        "fromVersion":  "1.4.8",
+                        "baseSha256":  "0185500594003b772b3936f5ad29f91ca1368f107849011c183eda07516ad927",
+                        "targetSha256":  "4da5ea87400aabb7b84142d4a777f0e20198a1a92fbe83b046237bbef1890354",
+                        "url":  "https://raw.githubusercontent.com/K0UM0RI/ledger_app_release/main/ledger-patch-v1.4.8-to-v1.4.9-x86_64.ldgpatch",
+                        "size":  1251817
                     }
                 ]
 }

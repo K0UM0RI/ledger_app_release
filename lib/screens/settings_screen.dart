@@ -380,15 +380,26 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
           ),
-          FutureBuilder<PackageInfo>(
-            future: PackageInfo.fromPlatform(),
+          FutureBuilder<(PackageInfo, DeviceUpdateInfo)>(
+            future: Future.wait([
+              PackageInfo.fromPlatform(),
+              UpdateService().getDeviceUpdateInfo(),
+            ]).then((results) => (
+                  results[0] as PackageInfo,
+                  results[1] as DeviceUpdateInfo,
+                )),
             builder: (context, snapshot) {
-              final version = snapshot.data?.version ?? '-';
-              final build = snapshot.data?.buildNumber ?? '-';
+              final version = snapshot.data?.$1.version ?? '-';
+              final build = snapshot.data?.$1.buildNumber ?? '-';
+              final abi = snapshot.data?.$2.primaryAbi ?? '';
+              final abiSuffix = abi.isNotEmpty ? ' • $abi' : '';
               return ListTile(
                 leading: Icon(Icons.verified, color: _isDark ? Colors.white : Colors.black),
                 title: const Text("Version"),
-                subtitle: Text('$version ($build)', style: TextStyle(color: _isDark ? Colors.grey : Colors.black87)),
+                subtitle: Text(
+                  '$version ($build)$abiSuffix',
+                  style: TextStyle(color: _isDark ? Colors.grey : Colors.black87),
+                ),
               );
             },
           ),
