@@ -1,5 +1,32 @@
 import 'transaction.dart';
 
+class TransactionCycle {
+  final int cycleNumber;
+  final List<Transaction> transactions;
+  final bool isSettled;
+
+  const TransactionCycle({
+    required this.cycleNumber,
+    required this.transactions,
+    required this.isSettled,
+  });
+
+  DateTime get startDate => transactions.first.date;
+  DateTime get endDate => transactions.last.date;
+
+  /// Total positive volume exchanged in this cycle.
+  /// For a settled cycle (net 0), this equals abs(sum of negative amounts).
+  double get totalVolume => transactions
+      .where((t) => t.amount > 0)
+      .fold(0.0, (sum, t) => sum + t.amount);
+
+  /// Net balance of this cycle (0.0 when settled).
+  double get netAmount {
+    final sum = transactions.fold(0.0, (s, t) => s + t.amount);
+    return sum.abs() < 0.005 ? 0.0 : sum;
+  }
+}
+
 class Friend {
   final String id;
   final String name;
@@ -10,6 +37,52 @@ class Friend {
   bool isManuallyUnarchived;
 
   bool get hasZeroBalance => amountOwed.abs() < 0.005;
+
+  /// Groups transactions chronologically into settled cycles (whenever the
+  /// running balance returns to 0.00) plus an optional trailing active cycle.
+  List<TransactionCycle> get transactionCycles {
+    if (transactions.isEmpty) return const [];
+
+    final indexed = transactions.asMap().entries.toList()
+      ..sort((a, b) {
+        final cmp = a.value.date.compareTo(b.value.date);
+        return cmp != 0 ? cmp : a.key.compareTo(b.key);
+      });
+
+    final List<TransactionCycle> cycles = [];
+    List<Transaction> current = [];
+    double runningBalance = 0.0;
+
+    for (final entry in indexed) {
+      final tx = entry.value;
+      current.add(tx);
+      runningBalance += tx.amount;
+
+      if (runningBalance.abs() < 0.005) {
+        runningBalance = 0.0;
+        cycles.add(
+          TransactionCycle(
+            cycleNumber: cycles.length + 1,
+            transactions: List<Transaction>.unmodifiable(current),
+            isSettled: true,
+          ),
+        );
+        current = [];
+      }
+    }
+
+    if (current.isNotEmpty) {
+      cycles.add(
+        TransactionCycle(
+          cycleNumber: cycles.length + 1,
+          transactions: List<Transaction>.unmodifiable(current),
+          isSettled: false,
+        ),
+      );
+    }
+
+    return cycles;
+  }
 
   // Private constructor - used by factory methods
   Friend._({

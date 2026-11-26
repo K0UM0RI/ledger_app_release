@@ -1,6 +1,6 @@
 {
-    "version":  "1.4.6",
-    "buildNumber":  1010,
-    "downloadUrl":  "https://raw.githubusercontent.com/K0UM0RI/ledger_app_release/main/ledger-v1.4.6.apk",
-    "releaseNotes":  "Add archive friend feature"
+    "version":  "1.4.7",
+    "buildNumber":  1011,
+    "downloadUrl":  "https://raw.githubusercontent.com/K0UM0RI/ledger_app_release/main/ledger-v1.4.7.apk",
+    "releaseNotes":  "Added foldable settled cycles in transaction history (tap to expand/collapse, plus Expand/Fold All)."
 }

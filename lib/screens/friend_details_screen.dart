@@ -28,6 +28,9 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
 
   late TabController _tabController;
 
+  // Tracks which settled cycles (by 1-based cycleNumber) are currently unfolded
+  final Set<int> _expandedSettledCycles = {};
+
   // Calculator state (immediate running-total model)
   double _accumulatedTotal = 0.0;
   bool _hasAccumulated = false;
@@ -835,12 +838,189 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
     );
   }
 
+  String _formatCycleDateRange(TransactionCycle cycle) {
+    final start = cycle.startDate.toString().substring(0, 10);
+    final end = cycle.endDate.toString().substring(0, 10);
+    return start == end ? start : "$start → $end";
+  }
+
+  Widget _buildTransactionTile(
+    Transaction tx,
+    Color moneyColor, {
+    bool isInsideCycle = false,
+  }) {
+    return ListTile(
+      contentPadding: EdgeInsets.symmetric(
+        horizontal: isInsideCycle ? 16 : 20,
+        vertical: isInsideCycle ? 2 : 4,
+      ),
+      dense: isInsideCycle,
+      onTap: () => _editTransactionDialog(tx),
+      onLongPress: () => _editTransactionDialog(tx),
+      leading: Icon(
+        tx.amount >= 0 ? Icons.arrow_back : Icons.arrow_forward,
+        color: tx.amount >= 0 ? Colors.green : moneyColor,
+        size: isInsideCycle ? 20 : 24,
+      ),
+      title: Text(
+        tx.reason,
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          color: widget.isDark ? Colors.white : Colors.black,
+        ),
+      ),
+      subtitle: Text(
+        "${tx.date.toString().substring(0, 16)}${tx.isEdited ? ' (edited)' : ''}",
+        style: const TextStyle(color: Colors.grey),
+      ),
+      trailing: Text(
+        "${tx.amount.toStringAsFixed(2)} MAD",
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: isInsideCycle ? 14 : 15,
+          fontFamily: 'Courier',
+          color: widget.isDark ? Colors.white : Colors.black87,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettledCycleCard(TransactionCycle cycle, Color moneyColor) {
+    final bool isExpanded = _expandedSettledCycles.contains(cycle.cycleNumber);
+    final Color cardBg = widget.isDark
+        ? const Color(0xFF141414)
+        : Colors.grey.shade100;
+    final Color borderColor = widget.isDark
+        ? Colors.white.withValues(alpha: 0.12)
+        : Colors.black.withValues(alpha: 0.10);
+    final Color titleColor = widget.isDark ? Colors.white : Colors.black87;
+    final count = cycle.transactions.length;
+    final entryLabel = count == 1 ? "1 entry" : "$count entries";
+    final cycleTxsNewestFirst = cycle.transactions.reversed.toList();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      child: Material(
+        color: cardBg,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: borderColor, width: 1),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            InkWell(
+              onTap: () {
+                setState(() {
+                  if (isExpanded) {
+                    _expandedSettledCycles.remove(cycle.cycleNumber);
+                  } else {
+                    _expandedSettledCycles.add(cycle.cycleNumber);
+                  }
+                });
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.check_circle_outline,
+                      color: Colors.green,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "SETTLED CYCLE #${cycle.cycleNumber}",
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.4,
+                              color: titleColor,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            "$entryLabel • ${_formatCycleDateRange(cycle)}",
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      "${cycle.totalVolume.toStringAsFixed(2)} MAD",
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'Courier',
+                        color: Colors.green,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      isExpanded
+                          ? Icons.keyboard_arrow_up
+                          : Icons.keyboard_arrow_down,
+                      color: Colors.grey,
+                      size: 20,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (isExpanded) ...[
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: borderColor,
+              ),
+              ...cycleTxsNewestFirst.map(
+                (tx) => _buildTransactionTile(
+                  tx,
+                  moneyColor,
+                  isInsideCycle: true,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final headerColor =
         widget.isDark ? const Color(0xFF1A1A1A) : Colors.grey[200];
     final headerTextColor = widget.isDark ? Colors.white54 : Colors.grey[600];
     final moneyColor = widget.isDark ? const Color(0xFFD71921) : Colors.red;
+
+    final allCycles = widget.friend.transactionCycles;
+    final settledCycles = allCycles.where((c) => c.isSettled).toList();
+    final TransactionCycle? activeCycle = allCycles.isNotEmpty && !allCycles.last.isSettled
+        ? allCycles.last
+        : null;
+    final bool allSettledExpanded = settledCycles.isNotEmpty &&
+        settledCycles.every((c) => _expandedSettledCycles.contains(c.cycleNumber));
+
+    // Build flat list of items in newest-first order:
+    // 1. Active cycle transactions (unfolded directly)
+    // 2. Settled cycles (folded cards, newest cycle first)
+    final List<Object> ledgerItems = [
+      if (activeCycle != null) ...activeCycle.transactions.reversed,
+      ...settledCycles.reversed,
+    ];
 
     return Scaffold(
       appBar: AppBar(
@@ -908,83 +1088,72 @@ class _FriendDetailsPageState extends State<FriendDetailsPage>
           Column(
             children: [
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 color: headerColor,
                 width: double.infinity,
-                child: Text(
-                  "TRANSACTION HISTORY",
-                  style: TextStyle(
-                    color: headerTextColor,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 2,
-                    fontSize: 12,
-                  ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "TRANSACTION HISTORY",
+                      style: TextStyle(
+                        color: headerTextColor,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 2,
+                        fontSize: 12,
+                      ),
+                    ),
+                    if (settledCycles.isNotEmpty)
+                      InkWell(
+                        onTap: () {
+                          setState(() {
+                            if (allSettledExpanded) {
+                              _expandedSettledCycles.clear();
+                            } else {
+                              _expandedSettledCycles.addAll(
+                                settledCycles.map((c) => c.cycleNumber),
+                              );
+                            }
+                          });
+                        },
+                        child: Text(
+                          allSettledExpanded ? "FOLD ALL" : "EXPAND ALL",
+                          style: const TextStyle(
+                            color: Color(0xFFD71921),
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.2,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
               Expanded(
-                child: Builder(
-                  builder: (context) {
-                    final sortedTransactions = [
-                      ...widget.friend.transactions,
-                    ]..sort((a, b) => b.date.compareTo(a.date));
-
-                    if (sortedTransactions.isEmpty) {
-                      return const Center(
+                child: ledgerItems.isEmpty
+                    ? const Center(
                         child: Text(
                           "No transactions recorded yet.",
                           style: TextStyle(color: Colors.grey),
                         ),
-                      );
-                    }
-
-                    return ListView.builder(
-                      itemCount: sortedTransactions.length,
-                      itemBuilder: (context, index) {
-                        final tx = sortedTransactions[index];
-
-                        return ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 4,
-                          ),
-                          onTap: () => _editTransactionDialog(tx),
-                          onLongPress: () => _editTransactionDialog(tx),
-                          leading: Icon(
-                            tx.amount >= 0
-                                ? Icons.arrow_back
-                                : Icons.arrow_forward,
-                            color:
-                                tx.amount >= 0 ? Colors.green : moneyColor,
-                          ),
-                          title: Text(
-                            tx.reason,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: widget.isDark
-                                  ? Colors.white
-                                  : Colors.black,
-                            ),
-                          ),
-                          subtitle: Text(
-                            "${tx.date.toString().substring(0, 16)}${tx.isEdited ? ' (edited)' : ''}",
-                            style: const TextStyle(color: Colors.grey),
-                          ),
-                          trailing: Text(
-                            "${tx.amount.toStringAsFixed(2)} MAD",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                              fontFamily: 'Courier',
-                              color: widget.isDark
-                                  ? Colors.white
-                                  : Colors.black87,
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.only(bottom: 84),
+                        itemCount: ledgerItems.length,
+                        itemBuilder: (context, index) {
+                          final item = ledgerItems[index];
+                          if (item is TransactionCycle) {
+                            return _buildSettledCycleCard(item, moneyColor);
+                          }
+                          return _buildTransactionTile(
+                            item as Transaction,
+                            moneyColor,
+                          );
+                        },
+                      ),
               ),
             ],
           ),
